@@ -7,3 +7,13 @@
 * 【4小时】  Header中Content-Disposition的作用与使用方法；springboot打成jar后获取classpath下文件失败；Java之泛型 T与T的用法；阅读cc_common中工具类的源码
 * 【4小时】  学习Java中JDK动态代理方法，和通过MethodInterceptor和Enhancer实现CGLib动态代理方法，并添加了回调过滤器CallbackFilter
 
+8-5
+
+- 【4小时】 将部门分配的新电脑配置为自身熟悉的开发环境，阅读cc-auth的配置源码，学习Git的分支使用
+- 【4小时】 新增/修改组织管理，经理秘书管理，号码管理的Dao接口和mapper，以适配oracle数据库
+
+8-6
+
+- 【4小时】  新增/修改日志管理，参数管理，黑白名单管理的Dao接口和mapper，以适配oracle数据库
+- 【4小时】  解决git HEAD 指向其他分支导致的合并分支问题；阅读cc-auth 源码；学习Apache Shiro（三）
+
