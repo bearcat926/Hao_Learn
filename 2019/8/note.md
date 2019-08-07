@@ -17,3 +17,6 @@
 - 【4小时】  新增/修改日志管理，参数管理，黑白名单管理的Dao接口和mapper，以适配oracle数据库
 - 【4小时】  解决git HEAD 指向其他分支导致的合并分支问题；阅读cc-auth 源码；学习Apache Shiro（三）
 
+8-7
+- 【4小时】  测试cc-auth项目修改后的mysql；学习了git中的merge , rebase  , branch default；删除多余接口，修复其导致的代码冲突， 规范文件命名
+- 【4小时】  学习Redis命令（一）
