@@ -1,3 +1,3 @@
-# dc_learn
+# Hao_Learn
 
-## Solve any problems I encounter in my work
+## Solve any problems I encounter in my work and study
