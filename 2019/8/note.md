@@ -18,5 +18,11 @@
 - 【4小时】  解决git HEAD 指向其他分支导致的合并分支问题；阅读cc-auth 源码；学习Apache Shiro（三）
 
 8-7
+
 - 【4小时】  测试cc-auth项目修改后的mysql；学习了git中的merge , rebase  , branch default；删除多余接口，修复其导致的代码冲突， 规范文件命名
-- 【4小时】  学习Redis命令（一）
+- 【4小时】  学习Redis命令（一），Redis的优缺点，与 Memcached 的区别，数据类型部分
+
+8-8
+
+- 【3小时】  学习Redis命令（二），基本完成数据类型的学习；使用JRebel并测试
+- 【5小时】  学习Redis命令（三） -  事务和分布式锁；时间复杂度中的log（n）底数解析；解决Intellij idea build时出现Artifact contains illegal characters的问题
