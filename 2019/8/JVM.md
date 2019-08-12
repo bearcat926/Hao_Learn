@@ -1,4 +1,4 @@
-![JVM1](https://github.com/bearcat926/Hao_Learn/blob/master/2019/8/img/JVM1.png?raw=true)
+![JVM1](E:\git_repo\Hao_Learn\2019\8\img\JVM1.png)
 new 出来的所有对象都放在堆里面
 
 每个线程对应一个栈
@@ -253,4 +253,4 @@ SourceFile: "JavapDemo.java"
 ```
 
 
-![JVM2](https://github.com/bearcat926/Hao_Learn/blob/master/2019/8/img/JVM2.png?raw=true)
+![JVM2](E:\git_repo\Hao_Learn\2019\8\img\JVM2.png)
