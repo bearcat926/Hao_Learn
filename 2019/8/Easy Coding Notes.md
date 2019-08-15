@@ -462,8 +462,14 @@ Java 类主要由两部分组成：成员和方法。在定义 Java 类时，推
 
 ```java
 public abstract class AbstractCollection<E> implements Collection<E> {
-
-
+	//Collection 定义的抽象方法，但本类没有实现
+	//Collection 接口定义的方法，size()这个方法对于链表和顺序表有不同的实现方式
+	public abstract int size();
+	
+	//实现Collection接口的这个方法，因为对AbstractCollection的子类他们判空的方式的一致的，这就是模板式设计，对于所有他的子类,实现共同的方法体，通过多态调用到子类的具体size()实现
+	public boolean isEmpty(){
+		return size() == 0;
+	}
 }
 ```
 
@@ -471,10 +477,69 @@ Java 语言中类的继承采用单继承形式，避免继承泛滥、菱形继
 
 #### 内部类
 
-在一个 `.java` 源文件中，只能定义一个类名与文件名完全一致的公开类，使用`public class` 关键字来修饰。但在面向对象语言中，任何一个类都可以在内部定义另外一个类 ，前者为外部类，后者为内部类。
+在一个 `.java` 源文件中，只能定义一个类名与文件名完全一致的公开类，使用`public class` 关键字来修饰。但在面向对象语言中，任何一个类都可以在内部定义另外一个类 ，前者为外部类，后者为内部类。内部类本身就是类的一个属性 ，与其他属性定义方式一致。
 
-p68
 
-https://blog.csdn.net/xuzhimin1991/article/details/82691256
-http://www.throwable.club/
-http://www.throwable.club/2019/05/05/design-pattern-basic-law/#%E4%BB%80%E4%B9%88%E6%98%AF%E8%AE%BE%E8%AE%A1%E6%A8%A1%E5%BC%8F
+
+比如，属性字段`private static String str` ，由访问控制符、是否静态、类型、变量名组成，而内部类 `private static class Inner{}`，也是按这样的顺序来定义的，类型
+可以为 class、enum ，甚至是 interface ，当然在内部类中定义接口是不推荐的。
+
+内部类具体分为如下四种：
+- 静态内部类，如： static class StaticInnerClass {} ;
+- 成员内部类，如： private class InstancelnnerClass {} ;
+- 局部内部类，定义在方法或者表达式内部；
+- 匿名内部类，如： (new Thread () {} ).start() 。
+
+无论是什么类型的内部类，都会编译成一个独立的 `.class` 文件。
+
+![1565878774945](E:\git_repo\Hao_Learn\2019\8\img\1565878774945.png)
+
+
+
+外部类与内部类之间使用 $ 符号分隔，匿名内部类使用数字进行编号，而方法内部类，在 类名前还有一个编号来标识是哪个方法。匿名内部类和静态内部类是比较常用的方式。而
+静态内部类是最常用的内部表现形式，外部可以使用 OuterClass.StaticInnerClass 直接访问，类加载与外部类在同一个阶段进行，JDK 源码中，定义包内可见静态内部类的方式很常见，这样做的好处是：作用域不会扩散到包外；可以通过`外部类 内部类`的方式直接访问；内部类可以访问外部类申的所有静态属性和方法。
+
+```Java
+static class Node<K,V> implements Map.Entry<K,V> {
+    final int hash;
+    final K key;
+    volatile V val;
+    volatile Node<K,V> next ; 
+}
+```
+如上所示的源码是在 ConcurrentHashMap 中定义的 Node 静态内部类，用于表示一个节点数据，属于包内可见 ，包内其他集合要用到这个 Node 直接使用
+`ConcurrentHashMap.Node`。
+仅包内可见可以阻止外部程序随意使用此类来生成对象，Node的父类 Entry 是 Map 的静态内部类，之所以可以被 Node 成功继承，是因为两个外部类同属一个包。
+在 JDK 源码中，使用内部类封装某种属性和操作的方式比较常见，比如应用类加载器 Launcher的AppClassLoader, ReentrantLock中 AbstractQueuedSynchronizer 的内部类 Sync, ArrayList 中的私有静态内部类SubList。内部类中还可以定义内部类，形成多层嵌套 如在 ThreadLocal 静态内部类 ThreadLocalMap 中还定义一个内部类 Entry。
+
+![1565879947217](E:\git_repo\Hao_Learn\2019\8\img\1565879947217.png)
+
+#### 访问权限控制
+面向对象的核心思想之一就是封装，只把有限的方法和成员公开给别人，这也是迪米特法则的内在要求，使外部调用方对方法体内的实现细节知道得尽可能少。如何实现封装呢？需要使用某些关键字来限制类外部对类内属性和方法的随意访问，这些关键字就是访问权限控制符。在
+
+在任何情况下，类外部实例化出来的对象均无法调用私有方法。
+
+![1565880777933](E:\git_repo\Hao_Learn\2019\8\img\1565880777933.png)
+
+无访问权限控制符仅对包内可见，但千万不要说成 default，它并非访问权限控制符的关键字 ，另外，在 JDK8 接口中引入 default 默认方法实现，更加容易混淆两者释义。
+
+在定义类时，推荐访问控制级别从严处理：
+1. 如果不允许外部直接通过 new 创建对象，构造方法必须是 private。
+2. 工具类不允许有 public 或 default 构造方法。
+3. 类非静态成员变雪并且与子类共享，必须是 protected。
+4. 类非静态成员变量并且仅在本类使用，必须是 private。
+5. 类静态成员变量如果仅在本类使用，必须是 private。
+6. 若是静态成员变量，必须考虑是否为 final。
+7. 类成员方法只供类内部调用，必须是 private。
+8. 类成员方法只对继承类公开，那么限制为 protected。
+
+#### this 与 super
+
+对象实例化时，至少有一条从本类出发抵达 0bject 的通路，而打通这条路的两个主要工兵就是 this 和 super ，逢山开路，遇水搭桥。但是 this 和 super 往往是默默无闻的，在很多情况下可以省略，比如：
+- 本类方法调用本类属性。
+- 本类方法调用另一个本类方法。
+- 子类构造方法隐含调用 super () 。
+
+任何类在创建之初，都有一个默认的空构造方法，它是 super ()  的一条默认通路。构造方法的参数列表决定了调用通路的选择；如果子类指定调用父类的某个构造方法，super 就会不断往上溯源；如果没有指定，则 默认调用 super () 。**如果父类没有提供默认的构造方法，子类在继承时就会编译错误**。
+
+p73
