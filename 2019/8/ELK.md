@@ -360,20 +360,23 @@ PUT [索引名]/[类型名]/[id]
 
 使用HEAD命令可以检查一个文档是否存在，命令如下：
 `HEAD [索引名]/[类型名]/[id]`
+存在则返回 `200 - OK`，反之返回 `400 - Not Found`。
 
+如果想根据id一次获得多个文档，可以是用Multi GET API 根据索引名、类型名、id（或者路由）一次获取多个文档，返回一个文档数组。
 p136
 
+=== > 第八章 Java API
+
+p247
+
 ------------------------
 
-使用ELK处理数据的前提
-非敏感、不重要 
+使用ELK处理数据的前提：非敏感、不重要 
 
-------------------------
 ELK是日志收集、存储、可视化的一套解决方案。
-- Elasticsearch：易于部署（最小配置），垂直和水平缩放、API易于使用、对于大多数编程/脚本语言都可以模块化、好的在线文档、免费。
+- Elasticsearch：易于部署（最小配置），垂直和水平缩放、API易于使用、对于大多数编程/脚本语言都可以模块化、好的在线文档、免费，支持Python API进行查询，使用JSON语言进行大量查询和过滤选项
 - Logstash：类似于Flume，收集日志的。包含的日志数据源：window event logs、syslog、Bro(session data/dpi)、SiLK(flow)、SNMP()、PCAP(stored on disk,index information in ES )
 - Kibana：可视化（类似于R语言），图表等。
-
 总结，ELK具有以下特点：
 1. 批量分析
 2. 数据集关联
@@ -381,20 +384,11 @@ ELK是日志收集、存储、可视化的一套解决方案。
 4. 报警，使用Python/R
 
 ------------------------
-ES 
 
-支持Python API进行查询
-大量的查询和过滤选项都可以使用JSON语言
-
-------------------------
-
+Flume + Kafka：高可用，存储量大，有数据缓冲功能的日志收集系统。Agent：Source（源）、channel（管道）、Sink（下沉）
 
 ELK的关系 
-
 Logstash(collect) ---> Elasticsearch(storage + index + search) ---> kibana(view)
 flume                    --->  Kafka                                                           ---> R
 
-Flume + Kafka：日志收集系统。（存储量大，数据缓冲，高可用）
-	Agent:Source、channel、Sink
-	
 FileBeat，类似于Flume中的 spooldir组件	
