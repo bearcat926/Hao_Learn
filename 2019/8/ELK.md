@@ -60,6 +60,7 @@ useradd  elk -g elk -p elk
 ```
 
 **授权访问组权限**
+
 ```shell
 #chown -R [所属用户] : [所属用户组名] [要更改的文件路径]
 chown -R elk : elk /opt/elasticsearch-6.8.1
@@ -67,6 +68,7 @@ chmod -R 777 /opt/elasticsearch-6.8.1
 ```
 
 **授权 root 权限**
+
 ```shell
 chmod 777 /etc/sudoers
 vi /etc/sudoers
@@ -75,7 +77,7 @@ vi /etc/sudoers
 root    ALL=(ALL)       ALL
 
 #给用户elk添加root权限，NOPASSWD即不用输密码
-ymq     ALL=(ALL)       NOPASSWD:ALL 
+elk     ALL=(ALL)       NOPASSWD:ALL 
 ```
 ```shell
 pkexec chmod 0440 /etc/sudoers
@@ -94,7 +96,7 @@ vi /etc/security/limits.conf
 #添加如下内容
 * soft nofile 65536
 * hard nofile 131072
-* soft nproc 2048
+* soft nproc 4096
 * hard nproc 4096
 ```
 
@@ -371,6 +373,8 @@ p247
 
 ------------------------
 
+## ELK系统架构概述
+
 使用ELK处理数据的前提：非敏感、不重要 
 
 ELK是日志收集、存储、可视化的一套解决方案。
@@ -389,6 +393,25 @@ Flume + Kafka：高可用，存储量大，有数据缓冲功能的日志收集�
 
 ELK的关系 
 Logstash(collect) ---> Elasticsearch(storage + index + search) ---> kibana(view)
-flume                    --->  Kafka                                                           ---> R
+flume                    ---> Kafka                                                            ---> R
 
 FileBeat，类似于Flume中的 spooldir组件	
+
+
+
+-------------------------------------------
+
+Nginx整合Kibana
+
+1. 添加epel仓库
+>sudo yum -y install epel-release
+
+2. 安装nginx和httpd-tools软件包
+>sudo yum -y install nginx httpd-tools
+
+3. 通过htpasswd命令创建访问kibana webui的账号
+>sudo htpasswd -c /usr/local/nginx/htpasswd.users kibanaadmin
+
+4.修改Nginx配置文件
+
+>vi /usr/local/nginx/conf/nginx.conf
