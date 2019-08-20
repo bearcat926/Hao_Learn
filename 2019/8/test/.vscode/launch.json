@@ -1,0 +1,16 @@
+{
+    "configurations": [
+        {
+            "type": "java",
+            "name": "CodeLens (Launch) - ArrayListFailFast",
+            "request": "launch",
+            "mainClass": "ArrayListFailFast"
+        },
+        {
+            "type": "java",
+            "name": "CodeLens (Launch) - ArrayListFailFastArrayListFailFast",
+            "request": "launch",
+            "mainClass": "ArrayListFailFastArrayListFailFast"
+        }
+    ]
+}

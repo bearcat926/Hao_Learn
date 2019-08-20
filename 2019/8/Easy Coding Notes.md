@@ -1490,6 +1490,9 @@ Set 是不允许出现重复元素的集合类型。 Set 体系最常用的是 H
 
 第 2 处说明：如果原始容量是 13 ，当新添加 1 个元素时，依据程序中的计算方法得出 13 的二进制数为 1101 ，随后右移 1 位操作后得到二进制数 110 ，即十进制数 6 ，最终扩容的大小计算结果为 `oldCapacitiy + (oldCapacity >> 1) = 13 + 6 = 19` 。使用位运算主要是基于计算效率的考虑。在 JDK7 之前的公式，扩容计算方式和结果为 `oldCapacitiy × 3 ÷ 2 + 1 = 13 × 3 ÷ 2 + 1 = 20`
 
+ArrayList 真正数据的数组由 transient 修饰，表示此字段在类的序列化时将被忽略。因为集合序列化时系统会调用 writeObject 写入流中，在网络客户端反序列化的 readObject 时，会重新赋值到新对象的 elementData 中。为什么多此一举？因为 elementData 容量经常会大于实际存储元素的数 ，所以只需发送真正有实际值
+的数组元素即可。
+
 ArrayList 使用无参构造时，默认大小为 10 ，也就是说在第一次 add 的时候分配为 10 的容量，后续的每次扩容都会调用 Array.copyOf 方法，创建新数组再复制。可以想象，假如需要将 1000 个元素放置在 ArrayList ，采用默认构造方法，则需要被动扩容 13 次才可以完成存储。若初始化时便指定了容量的初始大小，可以**避免被动扩容和数组复制的额外开销**。最后，进一步设想，如果这个值达到更大量级， 却没有注意初始的容量分配问题，那么无形中造成的性能损耗是非常大的，甚至导致 OOM 的风险。
 
 再来看一下 HashMap ，如果它需要放置 1000 个元素 ，同样没有设置初始容量大小，随着元素的不断增加，则需要被动扩容 7 次才可以完成存储。扩容时需要重建 hash 表非常影响性能。在 HashMap 中有两个比较重要的参数：Capacity Load Factor ，其中 Capacity 决定了存储容量的大小，默认为 16 ，而 LoadFactor 决定了填充比例，一般使用默认的 0.75 。基于这两个参数的乘积， HashMap 内部用 threshold 变量表示 HashMap 中能放入的元素个数。HashMap 容量并不会在 new 的时候分配，而是在第一次 put 的时候完成创建的，源码如下：
@@ -1522,7 +1525,7 @@ Arrays 是针对数组对象进行操作的工具类，包括数组的排序、�
 
 ![1566226560148](E:\git_repo\Hao_Learn\2019\8\img\1566226560148.png)
 
-事实证明，可以通过 set() 方法修改元素的值，原有数组相应位置的值同时也会被修改，但是不能进行修改元素个数的任何操作，否则均会抛出UnsupportedOperationException 异常。Arrays.asList 体现的是适配器模式，后台的数据仍是原有数组， set() 方法即间接对数组进行值的修改操作。 asList的返回对象是一个Arrays 的内部类 ArrayList类（或许命名为 InnerArrayList 更容易识别），它并没有实现集合个数的相关修改方法，这也正是抛出异常的原因。
+事实证明，可以通过 set() 方法修改元素的值，原有数组相应位置的值同时也会被修改，但是不能进行修改元素个数的任何操作，否则均会抛出UnsupportedOperationException 异常。Arrays.asList 体现的是适配器模式，后台的数据仍是原有数组， set() 方法即间接对数组进行值的修改操作。 asList的返回对象是一个Arrays 的内部类 ArrayList 类（或许命名为 InnerArrayList 更容易识别），它并没有实现集合个数的相关修改方法，这也正是抛出异常的原因。
 Arrays.asList 的源码如下：
 ```Java
 public static <T> List<T> asList(T... a) {
@@ -1533,8 +1536,371 @@ public static <T> List<T> asList(T... a) {
 
 ![1566226996177](E:\git_repo\Hao_Learn\2019\8\img\1566226996177.png)
 
-p172
+第 1 处的 final 引用，用于存储集合的数组引用始终被强制指向原有数组（引用不能变，但数组的值可以改变）。这个内部类并没有实现任何修改集合元素个数的相关方法 那这个
+UnsupportedOperat onException 异常是从哪里抛出来的呢？是ArrayList的父类 AbstractList 
+
+![1566265511789](E:\git_repo\Hao_Learn\2019\8\img\1566265511789.png)
+
+在使用数组转集合时，需要使用 java util.ArrayList 直接创建一个新集合，参数就是 Arrays .asList 返回的不可变集合，源码如下：
+
+```Java
+List<Object> objectList = new java.util.ArrayList<Object>(Arrays.asList(数组));
+```
+相对于数组转集合来说，集合转数组更加可控，毕竟是从相对自由的集合容器转为更加苛刻的数组。什么情况下集合需要转成数组呢？适配别人的数组接口，或者进行局部方法计算等。
+
+![1566266222956](E:\git_repo\Hao_Learn\2019\8\img\1566266222956.png)
+
+第 1 处比较容易理解，不要用 toArray() 无参方法把集合转换成数组，这样会导致泛型丢失，在第 2 处执行成功后，输出却为 null ；第 3 处正常执行，成功地把集合数据复制到 array3 数组中。第 2 处与第 3 处的区别在于即将复制进去的数组容量是否足够。如果容量不够，则弃用此数组，另起炉灶，关于此方法的源码如下：
+
+![1566266401568](E:\git_repo\Hao_Learn\2019\8\img\1566266401568.png)
+
+当入参数组容量小于集合大小时 使用 Arrays.copyOf() 方法，它的源码如下：
+
+![1566266694746](E:\git_repo\Hao_Learn\2019\8\img\1566266694746.png)
+
+用示例代码模拟可能出现的三种情况，分别为入参数组容量不够时、入参数组容量刚好时，以及入参数组容量超过集合大小时，并记录其执行时间。多次运行结果显示，当数组容量等于集合大小时，运行总是最快的，空间消耗也是最少的。由此证明，如果数组初始大小设置不当，不仅会降低性能，还会浪费空间。使用集合的 toArray (T[] array) 方法，转换为数组时，注意需要传入类型完全一样的数组，并且它的容量大小为 list.size ()。
+
+## 6.5 集合与泛型
+
+泛型与集合的联合使用，可以把泛型的功能发挥到极致。
+
+#### List、`List<Objectt>`、 `List<?>` 三者的区别。
+List 完全没有类型限制和赋值限定，如果天马行空地乱用，迟早会类型转换失败的异常。很多程序员觉得 `List<Objectt>`的用法完全等同于 List，但在接受其他泛型赋值时会编译出错。`List<?>` 是一个泛型，在没有赋值之前，表示它可以接受任何类型的集合赋值，赋值之后就不能随便往里添加元素了。
+
+![1566268907287](E:\git_repo\Hao_Learn\2019\8\img\1566268907287.png)
+
+第一段说明：遍历没有问题，但强制转化为非 Object 的类型，则会抛出 ClassCastException 异常。
+
+第二段说明：把 a1 赋值给 a2, a2 是 List Object> 类型的，也可以再往里装入三种不同的对象。很多程序员认为 List 和 `List<Object>` 是完全相同的，至少从目前这两段来看是这样的。
+
+第三段说明：如果把 a1 的声明类型从 List 修改为`List<Object>`，那么第三段就会编译出错。`List<Object>`  赋值给 `List<Integer>` 是不允许的，若是反过来赋值，依然会编译出错。提示如下：
+
+![1566271441949](E:\git_repo\Hao_Learn\2019\8\img\1566271441949.png)
+
+注意，数组可以这样赋值，因为它是协变的，而集合不是。来看一段问题代码：
+
+![1566269651568](E:\git_repo\Hao_Learn\2019\8\img\1566269651568.png)
+
+进行了泛型限制，示例中 addAll 的实际参数是 getJSONArray 返回的 JSONArray 对象，它并非是 List ，更加不是 Integer 集合的子类，为何编译不报错？查看JSONArray 定义：
+```Java
+public final class JSONArray extends AbstractJSON implements JSON, List {} 
+```
+
+JSONArray 实现了 List，是非泛型集合，可以赋值给任何泛型限制的集合。编译可以通过，但在运行时报错，这是一个隐藏得比较深的 Bug ，最终导致发生线上故障。
+
+第四段说明：问号在正则表达式中可以匹配任何字符， `List<?>`称为通配符集合。它可以接受任何类型的集合引用赋值，不能添加任何元素，但可以 remove 和 clear，并非 immutable 集合。`List<?>`一般作为参数来接收外部的集合，或者返回一个不知道具体元素类型的集合。
+
+`List<T>`最大的问题是只能放置一种类型，如果随意转换类型的话，就是“破窗理论“，泛型就失去了类型安全的意义。
+
+#### 区分`<? extends T>`与`<? super T>`的使用场景
+
+为了放置多种受泛型约束的类型，JDK 的开发者顺应了民意，实现了`<? extends T>`与`<? super T>`两种语法，但是两者的区别非常微妙。简单来说，`<? extends T>`是 Get First，适用于消费集合元素为主的场景；`<? super T>`是Put Frist，适用于生产集合元素为主的场景。
+
+`<? extends T>`可以**赋值**给任何 T 及 T 子类的集合，上界为 T， 取出来的类型带有泛型限制，向上强制转型为任何 T 及 T 父类的父类集合，即子类类型被擦除了。由于 null 可以表示任何类型，所以除 null 外，任何元素都不得添加进`<? extends T>` 集合内。
+
+`<? super T>`可以**赋值**给任何 T 及 T 父类的父类集合，下界为 T 。在生活中，投票选举类似于`<? super T>`的操作。选举代表时，只能有代表以下的人往里投选票，即只能添加任何 T 及 T 子类的集合。而取数据时，根本不知道是谁的票，相当于泛型丢失，即只能返回Object对象。
+
+extends 的场景是 put 功能受限，super 场景是 get 功能受限。
+
+## 6.6 元素的比较
+
+#### Comparable 和 Comparator
+
+Java 中两个对象相比较的方法通常用在元素排序中，常用的两个接口分别是Comparable 和 Comparator ，前者是自己和自己比，可以看作是自营性质的比较器；后者是第三方比较器，可以看作是平台性质的比较器。从词根上分析 Comparable 以 -able 结尾，表示它有自身具备某种能力的性质，表明 Comparable 对象本身是可以与同类型进行比较的，它的比较方法是 comparaTo ，而 Comparator 以 -or 结尾，表示自身是比较器的实践者，它的比较方法是 compare。
+
+我们熟知的 Integer 和 String 实现的就是 Comparable 的自然排序。而我们在使用某个自定义对象时，可能需要按照自己定义的方式排序，比如在搜索列表对象 SearchResult 中进行大小比较时，先根据相关度排序，然后再根据浏览数排序，实现这样的自定义 Comparable 的示例代码如下：
+
+![1566271753344](E:\git_repo\Hao_Learn\2019\8\img\1566271753344.png)
+
+实现 Comparable 时，可以加上泛型限定，在编译阶段即可发现传入的参数非 SearchResult 对象，不需要在运行期进行类型检查和强制转换。
+
+如果这个排序的规则不符合业务方的要求，那么就需要修改这个类的比较方法 compareTo，然而我们都知道开闭原则， 即最好不要对自己已经交付的类进行修改。因此推荐外部定义比较器，即 Comparator。
+
+正因为 Comparator 的出现，业务方可以根据需要修改排序规则。如在上面的示例代码中， 如果业务方需要在搜索时将最近订单数 (recentOrders) 的权重调整到相关度与浏览数之间，则使用 Comparator 实现的比较器如下所示：
+
+![1566272989334](E:\git_repo\Hao_Learn\2019\8\img\1566272989334.png)
+
+在 JDK 中， Comparator 最典型的应用是在 Arrays.sort 中作为比较器参数进行排序：
+
+![1566273035937](E:\git_repo\Hao_Learn\2019\8\img\1566273035937.png)
+
+红色的`<? super T>`语法为下限通配，也就是将泛型类型参数限制为 T 或 T的某个父类，直到 Object 。该语法只能用在形参中来限定实参调用。如果本例中不加限定，假定 sort 对象是 Integer，那么传入 String 时就会编译报错，就是充分利用了多态的向下转型的功能。
+
+约定俗成，不管是 Comparable 还是 Comparator，小于的情况返回 -1，等于的情况返回 0，大于的情况返回 1。当然，很多代码里只是判断是否大于或小于 0，如在集合中使用比较器进行排序时，直接使用正负来判断比较的结果。
+
+![1566273353047](E:\git_repo\Hao_Learn\2019\8\img\1566273353047.png)
+
+sort() 方法中的 TimSort 算法，是归并排序（Merge Sort）与插入排序（Insertion Sort）优化后的排序算法。
+
+首先回顾一下归并排序的原理。长度为 1 的数组是排序好的，有 n 个元素的集合可以看成是 n个长度为 1 的有序子集合；对有序子集合进行两两归并，并保证结果子集合有序，最后得到 n/2 个长度为 2 的有序子集合，重复上一步骤直到所有元素归并成一个长度为 n 的有序集合。在此排序过程中，主要工作都在归并处理中，如何使归并过程更快，或者如何减少归并次数，成为优化归并排序的重点。
+再回顾插入排序的工作原理。长度为 1 的数组是有序的，当有了 k 个己排序的元素，将第 k+1 个元素插入己有的 k 个元素中合适的位置，就会得到一个长度为 k+1 己排序的数组。假设有 n 个元素且已经升序排列的数组，并且在数组尾端有第 n+1 个元素的位置，此时如果想要添加一一个新的元素并保持数组有序，根据插入排序可以将新元素放到第 n+1个位置上，然后从后向前两两比较，如果新值较小则交换位置，直到新元素到达正确的位置。
+
+2002年，Tim Peters 结合归并排序和插入排序的优点，实现了 TimSort 排序算法。该算法避免了归并排序和插入排序的缺点，相对传统归并排序，减少了归并次数；相对插入排序，引入了二分排序概念，提升了排序效率。Tim Sort 算法对于已经部分排序的数组，时间复杂度最优可达*O*(n)；对于随机排序的数组，时间复杂度为 *O*(*n*logn)，平均时间复杂度为 *O*(*n*logn)
+
+因此 Java JDK7 中使用 TimSort 算法取代了原来的归并排序。它有两个主要优化：
+1. 归并排序的分段不再从单个元素开始，而是每次先查找当前最大的排序好的数组片段run，然后对 run 进行扩展并利用二分排序，之后将该 run 其他已经排序好的 run 进行归并，产生排序好的大 run。
+2. 引入二分排序，binarySort 。二分排序是对插入排序的优化，在插入排序中不再是从后向前逐个元素对比，而是引入了二分查找的思想，将一次查找新元素合适位置，时间复杂度由
+*O*(*n*)  降低到 *O*(*n*logn) 。
+
+#### hashCode 和 equals
+
+hashCode 和 equals 用来标识对象，两个方法协同工作可用来判断两个对象是否相等。众所周知，根据生成的哈希将数据离散开来，可以使存取元素更快。对象通过调用 Object.hashCode()生成哈希值，由于不可避免地会存在哈希值冲突的情况，因此当 hashCode 相同时，还需要再调用 equals 进行次值的比较；但是若 hashCode 不同，将直接判定 Objects 不同，跳过 equals，这加快了冲突处理效率。
+
+Object  类定义中对 hashCode 和 equals 要求如下：
+
+- 如果两个对象的 equals 的结果是相等的，则两个对象的 hashCode 的返回结果也必须是相同的。
+- 任何时候覆写 equals，都必须同时覆写 hashCode。
+
+HashMap 的 get 判断代码如下：
+
+![1566281127923](E:\git_repo\Hao_Learn\2019\8\img\1566281127923.png)
+
+equals 不相等时并不强制要求 hashCode 也不相等，但一个优秀的哈希算法应尽可能地让元素均匀分布，降低冲突概率，即在 equals 不相等时尽量使 hashCode 也不相等，这样 && 或 || 短路操作一旦生效，会极大地提高程序的执行效率。
+
+如果自定义对象作为 Map 的键，那么必须覆写 hashCode 和 equals 。此外，因为 Set 存储的是不重复的对象，依据 hashCode 和 equals 进行判断，所以 Set 存储的自定义对象也必须覆写这两个方法。
+
+如果覆写了 equals ，而没有覆写 hashCode，会发生什么呢？先看一个覆写了 equals 的例子：
+
+![1566281800423](E:\git_repo\Hao_Learn\2019\8\img\1566281800423.png)
+
+如果不覆写 hashCode()，即使 equals() 相等也毫无意义。Object.hashCode() 的实现是默认为每一个对象生成不同的 int 数值，它本身是 native 方法，一般与对象内存地址有关。下面查看 C++的源码实现：
+
+![1566282242583](E:\git_repo\Hao_Learn\2019\8\img\1566282242583.png)
+
+ObjectSynchronizer 的核心代码如下，从代码分析角度也印证了 hashCode 就是根据对象的地址进行相关计算得到 int 类型数值的：
+
+![1566282264165](E:\git_repo\Hao_Learn\2019\8\img\1566282264165.png)
+
+因为 EqualsObject 没有覆写 hashCode ，所以得到的是一个与对象地址相关的唯一值，回到刚 才的 HashSet 集合上，如果想存储不重复的元素，那么需要在EqualsObject 类中覆写 hashCode()：
+
+![1566282338829](E:\git_repo\Hao_Learn\2019\8\img\1566282338829.png)
+
+EqualsObject 的 name 属性是 String 类型， String 覆写了 hashCode()，所以可以直接调用。 equals() 的实现方式与类的具体处理逻辑有关，但又各不相同，因而应尽量分析源码来确定其判断结果 ，比如下列代码：
+
+![1566282948897](E:\git_repo\Hao_Learn\2019\8\img\1566282948897.png)
+
+第 1 处说明：局部变量类型推断( Local Variable Type Inference) 是 JDK10 引入的变量命名机制，一改 Java 是强类型语言的传统形象，这是 Java 致力于未来体积更小、面向生产效率的新语言特性，减少累赘的语法规则，当然这仅仅是一个语法糖， Java 仍然是一种静态语言。在初始化阶段，在处理 var 变量的时候，编译器会检测右侧代码的返回类型，并将其类型用于左侧，如下图所示：
+
+![1566283095694](E:\git_repo\Hao_Learn\2019\8\img\1566283095694.png)
+
+b 在第一次赋值时，类型推断为 Integer ，所以在第二次赋值为 double 时编译出错。如果一个方法内频繁地使用 var ，则会大大降低可读性，这是一个权衡，建议当用 var 定义变量时， 尽量不要超过两个。
+
+第 2 处说明：尽量避免通过实例对象引用来调用 equals 方法，否则容易抛出空指针异常。推荐使用 JDK7 引入的 Objects 的 equals 方法，源码如下，可以有效地防止在 equals 调用时产生 NPE 问题：
+
+![1566283261102](E:\git_repo\Hao_Learn\2019\8\img\1566283261102.png)
+
+## 6.7 fail-fast 机制
+
+fail-fast 机制是集合世界中比较常见的错误检测机制，通常出现在遍历集合元素的过程中。
+
+它是一种对集合遍历操作时的错误检测机制，在遍历中途出现意料之外的修改时，通过 unchecked 异常暴力地反馈出来。这种机制经常出现在多线程环境下，当前线程会维护一个计数比较器，即 expectedModCount 记录已经修改的次数。在进入遍历前，会把实时修改次数
+modCount 赋值给 expectedModCount，如果这两个数据不相等，则抛出异常。
+
+java.util 下的所有集合类都是 fail-fast，而 concurrent 包中的集合类都是 fail-safe 。
+
+人的大脑习惯用单线程方式处理日常逻辑，思维在某个时间段或某个深度上具有方向性。多线程的运行逻辑并非自然思维。我们通过 ArrayList.subList() 方法进一步阐述 fail-fast 这种机制。
+
+在某种情况下，需要从一个主列表 master 中获取子列表 branch , master 集合元素个数的增加或删除，均会导致子列表的遍历、增加、删除，进而产生 fail-fast 异常。伪代码分析如下：
+```Java
+import java.util.*;
+
+public class SubListFailFast {
+    public static void main(String[] args) {
+        List masterList = new ArrayList();
+        masterList.add("one");
+        masterList.add("two");
+        masterList.add("three");
+        masterList.add("four");
+        masterList.add("five");
+        List branchList = masterList.subList(0, 3);
+        // 下方三行代码，如果不注释掉，则会导致branchList操作出现异常（第1处）
+        masterList.remove(0);
+        masterList.add("ten");
+        masterList.clear();
+        // 下方四行全部能够正确执行
+        branchList.clear();
+        branchList.add("six");
+        branchList.add("seven");
+        branchList.remove(0);
+        // 正常遍历结束，只有一个元素：seven
+        for (Object t : branchList) {
+            System.out.println(t);
+        }
+        // 子列表修改导致主列表也被改动，输出：[seven , four , five]
+        System.out.println(masterList);
+    }
+}
+```
+
+第 1 处说明，如果不注释掉， masterList 的任何关于元素个数的修改操作都会导致 branchList  的 crud 抛出 ConcurrentModificationException 异常。在实际调研中，大部分程序员知道 subList 子列表无法序列化，也知道它的修改会导致主列表的修改，但是并不知道主列表元素个数的改动会让子列表如此敏感，频频抛出异常。在实际代码中，这样的故障案例属于常见的类型。 subList 方法返回的是内部类 SubList 的对象，SubList 类是 ArrayList 的内部类， SubList 的定义如下，并没有实现序列化接口，无法网络传输：
+```
+private static class SubList<E> extends AbstractList<E> implements RandomAccess { ... } 
+```
+
+在 foreach 遍历元素时，使用删除方式测试 fail-fast 机制，查看如下代码：
+```Java
+import java.util.*;
+
+public class ArrayListFailFast {
+    public static void main(String[] args) {
+        List<String> list = new ArrayList<String>();
+        list.add("one");
+        list.add("two");
+        list.add("three");
+        for (String s : list) {
+            if ("two".equals(s)) {
+                list.remove(s);
+            }
+        }
+        System.out.println(list);
+    }
+}
+```
+ArrayList 的 foreach 的执行时的代码顺序：
+1. 调用 ArrayList 的 iterator() ，返回一个内部类 Itr，该类继承了 `Iterator<E>`。
+2. 对 Itr 初始化，再调用 hasNext()，判断集合中是否有下一个值。如果有，再调用 next()，
+该方法首行代码为 checkForComodification()，检查 modCount 与 expectedModCount 是否相等，不相等则抛出 ConcurrentModificationException。
+3. 创建临时变量 i，经过cursor = i + 1，lastRet = i，最后返回值为 elementData[ i ]。期间如 果 i 的值大于等于 size ，则抛出NoSuchElementException，若 i 的值大于等于 elementData.length ，则抛出 ConcurrentModificationException。
+
+```java
+public Iterator<E> iterator() {
+		return new Itr();
+}
+private class Itr implements Iterator<E> {
+		// 下一个要返回的元素的索引
+        int cursor;       
+        // 被返回的最后一个元素的索引；默认值是 -1
+        int lastRet = -1; 
+        // 记录已经修改的次数
+        int expectedModCount = modCount;
+
+        Itr() {}
+
+        public boolean hasNext() {
+            return cursor != size;
+        }
+
+        @SuppressWarnings("unchecked")
+        public E next() {
+            checkForComodification();
+            int i = cursor;
+            if (i >= size)
+                throw new NoSuchElementException();
+            Object[] elementData = ArrayList.this.elementData;
+            if (i >= elementData.length)
+                throw new ConcurrentModificationException();
+            cursor = i + 1;
+            return (E) elementData[lastRet = i];
+        }
+
+        final void checkForComodification() {
+            if (modCount != expectedModCount)
+                throw new ConcurrentModificationException();
+        }
+    }
+```
+
+在集合遍历时维护一个初始值为 0 的游标 cursor，从头到尾地进行扫描，在 cursor == size 时，退出遍历。如图 6-2 所示，执行 remove 后，所有元素往前拷贝， size = size-1， 即为 2，这时 cursor 也等于 2，因此在执行hasNext()， 结果为 false ，退出循环体，并没有机会执行到 next()  的第一行代码 checkForComodification()。
+
+![1566289008898](E:\git_repo\Hao_Learn\2019\8\img\1566289008898.png)
+
+我们可以使用 Iterator 机制进行遍历时的删除，如果是多线程并发，还需要在 Iterator 遍历时加锁，如下源码：
 
 
-[函数式接口](https://www.cnblogs.com/wadmwz/p/9384660.html)
-[Timsort](https://blog.csdn.net/sinat_35678407/article/details/82974174)
+或者使用并发容器 CopyOnWriteArrayList 代替 ArrayList，该容器内部会对 Iterator 进行加锁操作。顺便简单介绍一个 COW （奶牛）家族，即 Copy-On-Write。它是并发的一种新思路，实行读写分离，如果是写操作，则复制一个新集合，在新集合内添加或删除元素。待一切修改完成之后，再将原集合的可引用指向新的集合。这样做的好处是可以高并发地对 COW 进行读和遍历操作，而不需要加锁，因为当前集合不会添加任何元素。
+
+使用 COW 时应注意两点：第一，尽量设置合理的容量初始值，它扩容的代价比较大；第二，使用批量添加或删除方法，如 addAll 或 removeAll 操作，在高并发请求下，可以攒一下要添加或者删除的元素，避免增加一个元素复制整个集合。
+
+如果集合数据是 100MB，再写入 50MB， 那么某个时间段内占用的内存就达到( 100MB x 2 ) + 50MB = 250MB，内存的大量占用会导致 GC 的频繁发生，从而降低服务器的性能。我们观察如下代码：
+
+```Java
+public static void main (String[] args) {
+    List<Long> copy= new CopyOnWriteArrayList<Long>();
+    
+    long start = System.nanoTime();
+    for (int i=0; i<20*10000; i++) {
+        copy.add(System.nanoTime()) ; 
+    }
+}
+```
+
+循环 20 万次，不断地进行数据插入，这对 COW 类型的集合来说简直是灾难性的操作，本示例执行时间为 97.8s，如果换成 ArrayList，则只需 39 ms，差距巨大！要初始化这样的 COW 集合，建议先将数据填充到 ArrayList 集合中去， 然后把 ArrayList 集合当成 COW 参数，这就是使用批量添加的另一种方式。所以明显 COW 适用于读多写极少的场景。
+
+COW 是 fail-safe 机制的，在并发包的集合中都是由这种机制实现的， fail-safe 是在安全的副本（或者没有修改操作的正本）上进行遍历 ，集合修改与副本的遍历是没有任何关系的，但是缺点也很明显，就是读取不到最新的数据。这也是 CAP 理论中 C ( Consistency) 与 A ( Availability)的矛盾，即一致性与可用性的矛盾。
+
+## 6.8 Map 类集合
+
+在数据元素的存储、查找、修改和遍历中， Java 中的 Map 类集合都与 Collection 类集合存在很大不同。它是与 Collection 平级的一个接口，在集合框架图上，它有一条微弱的依赖线与 Collection 类产生关联，那是因为部分方法返回 Collection 视图，比如 values() 方法返回的所有 Value 的列表。 Map 类集合中的存储单位是 KV 键值对，Map 类就是使用一定的哈希算法形成一组比较均匀的哈希值作为 Key，Value 值挂在 Key 上。 Map 类的特点如下：
+
+- Map 类取代了旧的抽象类 Dictionary，拥有更好的性能。
+- 没有重复的 Key ，可以有多个重复的 Value。
+- Value 可以是 List、Map、Set 类对象。
+- KV 是否允许为 null，以实现类约束为准。
+
+Map 接口除提供传统的增删改查方式外，还有三个 Map 类特有的方法，即返回所有的 Key，返回所有的 Value ， 返回所有的 KV 键值对。源码加注释如下：
+
+```Java
+// 返回Map类对象中的Key的Set视图
+Set<K> keySet();
+// 返回Map类对象中的所有Value集合的Collection视图
+// 返回集合实现类为 Values extends AbstractCollection<V>
+Collection<V> values(); 
+//返回Map类对象中的Key-Value对的Set视图
+Set<Map.Entry<K,V>> entrySet();
+```
+通常这些返回的视图是支持清除操作的， 但是修改和增加元素会抛出异常，因为AbstractCollection 没有实现 add 操作，但是实现了 remove、clear 等相关操作。所以在使用这些视图返回集合时，注意不要操作此类相关方法。
+
+![1566291534049](E:\git_repo\Hao_Learn\2019\8\img\1566291534049.png)
+
+从 1.0 -> 1.2 -> 1.5，这几个重点的 KV 集合类见证了 Java 语言成为工业级语言的成长历程。从线程安全到线程不安全，再到线程安全，经历了否定之否定的过程，不断走向成熟。在大多数情况下，直接使用 ConcurrentHashMap 替代 HashMap 没有任何问题，在性能上区别并不大，而且更加安全。抽样调查发现，近八成的程序员认为 ConcurrentHashMap 可以置入 null 值，毕竟它与 HashMap 是近亲，而 HashMap 的 KV 都可以为 null 。比如，在某次配置 xml 时，如果只是把 Key 复制过来，没有做相关的 null 判断就置入 ConcurrentHashMap 就会导致 NPE 异常，但是子线程的异常并不会抛给主线程，所以排查颇费周折。在任何 Map 类集合中，都要尽量避免 KV 设置为 null 值。
+
+#### 树（tree）
+
+树是一种常用的数据结构，它是一个由有限节点（本书统称为节点，而不是结点）组成的一个具有层次关系的集合，数据就存在树的这些节点中。
+
+- 最顶层只有一个节点，称为根节点， 类似于图 6-3 中在悬崖边上倒着生长的树，root 是根节点。
+- 在分支处有一个节点，指向多个方向，如果某节点下方没有任何分叉的话，就是叶子节点。
+- 从某节点出发，到叶子节点为止，最长简单路径上边的条数，称为该节点的高度。
+- 从根节点出发，到某节点边的条数，称为该节点的深度。
+
+如图 6-3 所示的树，根节点 root 的高度是 5，深度是 0；而节点 2 的高度是 4，深度是 1。树结构的特点如下：
+1. 一个节点，即只有根节点，也可以是一棵树。
+2. 其中任何一个节点与下面所有节点构成的树称为子树。
+3. 根节点没有父节点，而叶子节点没有子节点。
+4. 除根节点外，任何节点有且仅有一个父节点。
+5. 任何节点可以有 0 ~ n 个子节点。
+
+![1566292537991](E:\git_repo\Hao_Learn\2019\8\img\1566292537991.png)
+
+至多有两个子节点的树称为二叉树，图 6-3 所示的恰好是二叉树。二分法是经典的问题拆解算法，二叉树是近似于二分法的一种数据结构实现，二叉树是高效算法实现的载体，在整个数据结构领域具有举足轻重的地位。在二叉树的世界中，最为重要的概念是平衡二叉树、二叉查找树、红黑树。
+
+#### 平衡二叉树 
+
+如果把图 6-3 中的左侧枝叶全部砍掉的话，那么剩余的部分还是树吗？是的，但只是以“树”之名，行“链表”之实，如图 6-4(a) 所示。如果以树的复杂结构来实现简单的链表功能，则完全埋没了树的特点。看来对于树的使用，需要进行某种条件的约束，如图 6-4(b)所示，让链表一样的树变得更有层次结构，平衡二叉树就呼之欲出了。图 6-4(b) 的高度差为 5，而右侧树由 9 与 8 组成的递归右子树的，高度差为 1，高度差是一棵树是否为平衡二叉树的决定条件。
+
+平衡二叉树的性质如下：
+1. 树的左右高度差不能超过1。
+2. 任何往下递归的左子树与右子树，必须符合第一条性质。
+3. 没有任何节点的空树或只有根节点的树也是平衡二叉树。
+
+![1566293461228](E:\git_repo\Hao_Learn\2019\8\img\1566293461228.png)
+
+#### 二叉查找树
+
+二叉查找树又称二叉搜索树，即 Binary Search Tree，其中 Search 也可以替换为Sort ，所以也称为二叉排序树。 Java 中集合的最终目的就是加工数据，二叉查找树也是如此。树如其名，二叉查找树非常擅长数据查找。二叉查找树额外增加了如下要求：对于任意节点来说，它的左子树上所有节点的值都小于它，而它的右子树上所有节点的值都大于它。查找过程从树的根节点开始，沿着简单的判断向下走，小于节点值的往左边走，大于节点值的往右边走，直到找到目标数据或者到达叶子节点还未找到。
+遍历所有节点的常用方式有三种：前序遍历、中序遍历、后序遍历。它们三者的规律如下：
+
+1. 在任何递归子树中，左节点一定在右节点之前先遍历。
+2. 前序、中序、后序，仅指根节点在遍历时的位置顺序。即前序遍历的顺序是根节点、左节点、右节点，中序遍历的顺序是左节点、根节点、右节点；而后序遍历的顺序则是左节点、右节点、根节点。
+
+二叉查找树容易构造，但是如果缺少约束条件，随着数据不断地增加或删除容易失衡，很可能往一个方向野蛮生长，成为查找复杂度为 *O*(*n*) 的树。所以为了保持二叉树重要的平衡性，需要引入一种检测机制，随着插入删除动态地调整树结构。
+有很多算法的实现，如 AVL 树、红黑树、SBT(Size Balanced Tree)、Treap( 树堆）等。
+
+#### AVL 树
+
+AVL 树算法是以苏联数学家 Adelson-Velsky 和 Landis 名字命名的平衡二叉树算法，可以使二叉树的使用效率最大化。 AVL 树是一种平衡二叉查找树，增加和删除节点后通过树形旋转重新达到平衡。右旋是以某个节点为中心 将它沉入当前右子节点的位置，而让当前的左子节点作为新树的根节点，也称为顺时针旋转；同理，左旋是以某个节点为中心，将它沉入当前左子节点的位置 而让当前右子节点作为新树的根节点，也称为逆时针旋转。
+AVL 树就是通过不断旋转来达到树平衡的，下方的左旋和右旋只是旋转操作层面的简单示意图，我们应体会如何通过旋转达到一种新的平衡状态，不再基于插入和删除进行展开，右旋示意图如图 6-7 所示。
+
+![1566294324479](E:\git_repo\Hao_Learn\2019\8\img\1566294324479.png)
+
+p198
