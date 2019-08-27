@@ -361,3 +361,174 @@ private void rotateRight(Entry<K,V> p) {
 		p.parent = l;
 	}
 }
+
+
+ThreadLocal
+
+public T get() {
+	Thread t = Thread.currentThread();
+	ThreadLocalMap map = getMap(t);
+	if (map != null) {
+		ThreadLocalMap.Entry e = map.getEntry(this);
+		if (e != null) {
+			@SuppressWarnings("unchecked")
+			T result = (T)e.value;
+			return result;
+		}
+	}
+	return setInitialValue();
+}
+
+protected T initialValue() {
+	return null;
+}
+
+private T setInitialValue() {
+	T value = initialValue();
+	Thread t = Thread.currentThread();
+	ThreadLocalMap map = getMap(t);
+	if (map != null)
+		map.set(this, value);
+	else
+		createMap(t, value);
+	return value;
+}
+
+static class Entry extends WeakReference<ThreadLocal<?>> {
+	/** The value associated with this ThreadLocal. */
+	Object value;
+
+	Entry(ThreadLocal<?> k, Object v) {
+		super(k);
+		value = v;
+	}
+}
+
+Thread
+
+public Thread(ThreadGroup group, Runnable target, String name,
+				long stackSize) {
+	init(group, target, name, stackSize);
+}
+
+private void init(ThreadGroup g, Runnable target, String name,
+                      long stackSize) {
+	init(g, target, name, stackSize, null, true);
+}
+
+private void init(ThreadGroup g, Runnable target, String name,
+					long stackSize, AccessControlContext acc,
+					boolean inheritThreadLocals) {
+	if (name == null) {
+		throw new NullPointerException("name cannot be null");
+	}
+	this.name = name;
+
+	Thread parent = currentThread();
+	SecurityManager security = System.getSecurityManager();
+	if (g == null) {
+		/* Determine if it's an applet or not */
+
+		/* If there is a security manager, ask the security manager
+			what to do. */
+		if (security != null) {
+			g = security.getThreadGroup();
+		}
+
+		/* If the security doesn't have a strong opinion of the matter
+			use the parent thread group. */
+		if (g == null) {
+			g = parent.getThreadGroup();
+		}
+	}
+
+	/* checkAccess regardless of whether or not threadgroup is
+		explicitly passed in. */
+	g.checkAccess();
+
+	/*
+		* Do we have the required permissions?
+		*/
+	if (security != null) {
+		if (isCCLOverridden(getClass())) {
+			security.checkPermission(SUBCLASS_IMPLEMENTATION_PERMISSION);
+		}
+	}
+
+	g.addUnstarted();
+
+	this.group = g;
+	this.daemon = parent.isDaemon();
+	this.priority = parent.getPriority();
+	if (security == null || isCCLOverridden(parent.getClass()))
+		this.contextClassLoader = parent.getContextClassLoader();
+	else
+		this.contextClassLoader = parent.contextClassLoader;
+	this.inheritedAccessControlContext =
+			acc != null ? acc : AccessController.getContext();
+	this.target = target;
+	setPriority(priority);
+	if (inheritThreadLocals && parent.inheritableThreadLocals != null)
+		this.inheritableThreadLocals =
+			ThreadLocal.createInheritedMap(parent.inheritableThreadLocals);
+	/* Stash the specified stack size in case the VM cares */
+	this.stackSize = stackSize;
+
+	/* Set thread ID */
+	tid = nextThreadID();
+}
+
+static ThreadLocalMap createInheritedMap(ThreadLocalMap parentMap) {
+	return new ThreadLocalMap(parentMap);
+}
+
+private ThreadLocalMap(ThreadLocalMap parentMap) {
+	Entry[] parentTable = parentMap.table;
+	int len = parentTable.length;
+	setThreshold(len);
+	table = new Entry[len];
+
+	for (int j = 0; j < len; j++) {
+		Entry e = parentTable[j];
+		if (e != null) {
+			@SuppressWarnings("unchecked")
+			ThreadLocal<Object> key = (ThreadLocal<Object>) e.get();
+			if (key != null) {
+				Object value = key.childValue(e.value);
+				Entry c = new Entry(key, value);
+				int h = key.threadLocalHashCode & (len - 1);
+				while (table[h] != null)
+					h = nextIndex(h, len);
+				table[h] = c;
+				size++;
+
+			}
+		}
+	}
+}
+
+public class RequestProcessTrace {
+	private static final InheritableThreadLocal<FullLinkContext> FULL_LINK_THREADLOCAL = new InheritableThreadLocal<>();
+	public static FullLinkContext getContext() {
+		FullLinkContext fullLinkContext = FULL_LINK_THREADLOCAL.get();
+		if (fullLinkContext == null ) {
+			FULL_LINK_THREADLOCAL.set(new FullLinkContext()) ;
+			fullLinkContext = FULL_LINK_THREADLOCAL.get () ;
+		}
+		return fullLinkContext;
+	}
+
+	public static class FullLinkContext {
+		private String traceId;
+		public String getTraceid () {
+			if (StringUtils.isEmpty(traceid)) {
+				FrameWork.startTrace(null, "gujin");
+				traceid = FrameWork.getTraceId();
+			}
+			return traceId;
+		}
+		public void setTraceid(String traceid) {
+			this.traceId = traceId;
+		}
+	}
+}

@@ -221,8 +221,9 @@ TCP 是全双工通信，双方都能作为数据的发送方和接收方，但 
 ![1565718820471](E:\git_repo\Hao_Learn\2019\8\img\1565718820471.png)
 
 图中的红色字体所示的 TIME_WAIT 和 CLOSE_WAIT 分别表示主动关闭和被动关闭产生的阶段性状态，如果在线上服务器大量出现这两种状态，就会加重机器负载，也会影响有效连接的创建，因此需要进行有针对性的调优处理。
-• TIME_WAIT：主动要求关闭的机器表示收到了对方的 FIN 报文，并发送出了ACK 报文，进入 TIME_WAIT 状态，等 2MSL 后即可进入到 CLOSED 状态。如果 FIN_WAIT_1 状态下，同时收到带 FIN 标志和 ACK 标志的报文时，可以直接进入 TIME_WAIT 状态，而无须经过 FIN_WAIT_2 状态。
-• CLOSE_WAIT： 被动要求关闭的机器收到对方请求关闭连接的 FIN 报文，在第一次 ACK 应答后，马上进入 CLOSE_WAIT 状态。这种状态其实表示在等待关闭，并且通知应用程序发送剩余数据，处理现场信息，关闭相关资源。
+
+- TIME_WAIT：主动要求关闭的机器表示收到了对方的 FIN 报文，并发送出了ACK 报文，进入 TIME_WAIT 状态，等 2MSL 后即可进入到 CLOSED 状态。如果 FIN_WAIT_1 状态下，同时收到带 FIN 标志和 ACK 标志的报文时，可以直接进入 TIME_WAIT 状态，而无须经过 FIN_WAIT_2 状态。
+- CLOSE_WAIT： 被动要求关闭的机器收到对方请求关闭连接的 FIN 报文，在第一次 ACK 应答后，马上进入 CLOSE_WAIT 状态。这种状态其实表示在等待关闭，并且通知应用程序发送剩余数据，处理现场信息，关闭相关资源。
 
 在TME_WAIT 等待的 2MSL 是报文在网络上生存的最长时间，超过阈值便将报文丢弃。一般来说， MSL 大于 TTL 衰减至 0 的时间。在RFC793 中规定 MSL 为2 分钟。但是在当前的高速网络中， 2分钟的等待时间会造成资源的极大浪费，在高并发服务器上通常会使用更小的值。既然 TIME_WAIT 貌似是百害而无一利的，为何不直接关闭，进入 CLOSED 状态呢？原因有如下几点。
 1. 确认被动关闭方能够顺利进入 CLOSED 状态。
@@ -2151,3 +2152,297 @@ HashMap 的死链问题及扩容数据丢失问题是慎用 HashMap 的两个主
 
 例如，某个应用在 init() 方法中初始化一个 static 的 HashMap 集合对象，从数据库提取数据到集合中。应用启动过程中仅单线程调用一次初始化方法，不应该有任何问题。但机缘巧合下 init()， 被执行了两次，启动失败、 CPU 使用率飙升， dump 分析发现存在HashMap 死链。第1种解决方案是用ConcurrentHashMap 替代 HashMap；第2种解决方案是使用 `Collections.synchronizedMap(hashMap)` 包装成同步集合，第3种解决方案是对init() 同步操作 。此案例最终选择第3种解决方案，毕竟只有启动时调用而已。
 
+p211
+
+
+
+
+# 第七章 并发与多线程
+
+## 7.1 线程安全
+
+## 7.2 什么是锁
+
+## 7.3 线程同步
+
+## 7.4 线程池
+
+## 7.5 ThreadLocal
+
+ThreadLocal 初衷是在线程并发时，解决变量共享问题，但由于过度设计，比如弱引用和哈希碰撞，导致理解难度大、使用成本高，反而成为故障高发点，容易出现内存泄漏、脏数据、共享对象更新等问题。
+
+#### 引用类型
+
+对象在堆上创建之后所持有的引用其实是一种变量类型，引用之间可以通过赋值构成一条引用链。引用的可达性是判断能否被垃圾回收的基本条件。JVM 会据此自动管理内存的分配与回收，不需要开发工程师干预。但在某些场景下，即使引用可达，也希望能够根据语义的强弱进行有选择的回收，以保证系统的正常运行。根据引用类型语义的强弱来决定垃圾回收的阶段，我们可以把引用分为强引用、软引用、弱引用和虚引用四类。
+
+1. 强引用（Strong Reference）， 最为常见。如 Object object = new Object()；这样的
+变量声明和定义就会产生对该对象的强引用。只要对象有强引用指向，并且 GC Roots 可达，那么 Java 内存回收时，即使濒临内存耗尽，也不会回收该对象。
+
+2. 软引用（Soft Reference），引用力度弱于强引用，是用在非必需对象的场景。在即将 OOM 之前，垃圾回收器会把这些软引用指向的对象加入回收范围，以获得更多的内存空间，让程序能够继续健康运行。主要用来缓存服务器中间计算结果及不需要实时保存的用户行为等。
+
+3. 弱引用（Weak Reference），引用强度较前两者更弱，也是用来描述非必需对象的。如果弱引用指向的对象只存在弱引用这一条线路，则在下一次 YGC 时会被回收。由于 YGC 时间的不确定性，弱引用何时被回收也具有不确定性。弱引用主要用于指向某个易消失的对象，在强引用断开后，此引用不会劫持对象。调用 WeakReference.get() 可能返回 null ，要注意空指针异常。
+
+4. 虚引用（Phantom Reference），是极弱的一种引用关系，定义完成后，就无法通过该引用获取指向的对象。为一个对象设置虚引用的唯一目的就是希望能在这个对象被回收时收到一个系统通知。虚引用必须与引用队列联合使用，当垃圾回收时，如果发现存在虚引用，就会在回收对象内存前，把这个虚引用加入与之关联的引用队列中。
+
+![1566870450364](E:\git_repo\Hao_Learn\2019\8\img\1566870450364.png)
+
+软引用、弱引用、虚引用均存在带有队列的构造方法：
+```java
+public SoftReference(T referent, ReferenceQueue<? super T> q){ ... } 
+```
+
+软引用一般用于在同一服务器内缓存中间结果。如果命中缓存，则提取缓存结果，否则重新计算或获取。但是，软引用肯定不是用来缓存高频数据的，万一服务器重启或者软引用触发大规模回收，所有的访问将直接指向数据库，导致数据库的压力时大时小，甚至崩溃。
+
+`System.gc()`会建议垃圾收集器尽快进行垃圾收集，具体何时执行仍由 JVM 来判断。`System.runFinalization()`的作用是强制调用已经失去引用对象的`finalize()`。在代码中同时调用这两者，有利于更快地执行垃圾回收。
+
+在 JVM 启动参数加`-XX:+PrintGCDetails` （或高版本 JDK 使用 `-Xlog:gc`）来  
+观察 GC 的触发情况。
+
+在 YGC 下，可以轻松地回收 WeakReference 指向的对象。 WeakReference 典型的应用是在 WeakHashMap 中。WeakHashMap 适用于缓存不敏感的临时信息的场景。例如，用户登录系统后的浏览路径在关闭浏览器后可以自动清空。
+
+WeakReference 这种特性也用在了 ThreadLocal 上。 JDK 中的设计原意是在 ThreadLocal 对象消失后，线程对象再持有这个 ThreadLocal 对象是没有任何意义的，应该进行回收，从而避免内存泄漏。这种设计的出发点很好，但在实际业务场景中却并非如此，弱引用的设计方式反而增加了对 ThreadLocal 和 Thread 体系的理解难度。
+
+除强引用外，其他三种引用可以减少对象在生命周期中所占用的内存大小。如果控制得当，垃圾回收就能够随意地释放这些对象。如果使用了这些引用，就应该避免强引用劫持，即把强引用置为 null ，否则这三种引用就无法发挥它们的价值。
+
+#### Threadlocal 价值
+
+ThreadLocal 不能被翻译为线程本地化或本地结程，英语恰当的名称应该叫作`CopyValuelntoEveryThread`。
+
+```Java
+public T get() {
+	Thread t = Thread.currentThread();
+	ThreadLocalMap map = getMap(t);
+	if (map != null) {
+		ThreadLocalMap.Entry e = map.getEntry(this);
+		if (e != null) {
+			@SuppressWarnings("unchecked")
+			T result = (T)e.value;
+			return result;
+		}
+	}
+	return setInitialValue();
+}
+```
+每个线程都有自己的 ThreadLoca!Map，如果 map == null ，则直接执行 setlnitialValue() 。如果 map 已经创建，就表示 Thread 类的 threadLocals 属性已经初始化，如果 e == null ，依然会执行到 setlnitialValue()。源码如下：
+
+```Java
+protected T initialValue() {
+	return null;
+}
+
+private T setInitialValue() {
+	// 这是一个保护方法，CsGameByThreadLocal中初始化ThreadLocal对象时已覆写
+	T value = initialValue();
+	Thread t = Thread.currentThread();
+	// getMap的源码就是提取线程对象t的ThreadLocalMap属性：t.threadLocals 
+	ThreadLocalMap map = getMap(t);
+	if (map != null)
+		map.set(this, value);
+	else
+		createMap(t, value);
+	return value;
+}
+```
+```Java
+private static final ThreadLocalRandom RANDOM = ThreadLocalRandom.current();
+```
+threadLocalRandom 可以生成单独的Random 实例，此类在 JDK7 中引人，它使得每个线程都可以有自己的随机数生成器。要避免 Random 实例被多线程使用，虽然共享该实例是线程安全的，但会因竞争同一 seed 而导致性能下降。
+
+ThreadLocal 对象通常是由 private static 修饰的，因为都需要复制进入本地线程，所以非 static 作用不大。需要注意的是， ThreadLocal 无法解决共享对象的更新问题，使用某个引用来操作共享对象时，依然需要进行线程同步。
+
+![1566873826525](E:\git_repo\Hao_Learn\2019\8\img\1566873826525.png)
+
+ThreadLocal 有个静态内部类叫 ThreadLocalMap，它还有一个静态内部类叫 Entry，在 Thread 中的 ThreadLocalMap 属性的赋值是在 ThreadLocal 类中的 createMap() 中进行的。 ThreadLocal 与 ThreadLocalMap 有三组对应的方法 get() 、set() 和 remove()， 在ThreadLocal 中对它们只做校验和判断 ，最终的实现会落在ThreadLocalMap 上。 Entry 继承自 WeakReference，没有方法，只有一个 value 成员变量，它的 key 是 ThreadLocal 对象。
+
+![1566874718278](E:\git_repo\Hao_Learn\2019\8\img\1566874718278.png)
+
+- 1 个 Thread 有且仅有 1 个 ThreadLocalMap 对象；
+- 1 个 Entry 对象的 Key 弱引用指向 1 个 ThreadLocal 对象；
+- 1 个 ThreadLocalMap 对象存储多个 Entry 对象；
+- 1 个 ThreadLocal 对象可以被多个线程所共享；
+- ThreadLocal 对象不持有 Value, Value 由线程的 Entry 对象持有。
+
+图中的红色虚线箭头是重点，也是 ThreadLocal 中难以理解的地方， Entry的源码如下：
+
+```Java
+static class Entry extends WeakReference<ThreadLocal<?>> {
+	/** The value associated with this ThreadLocal. */
+	Object value;
+
+	Entry(ThreadLocal<?> k, Object v) {
+		super(k);
+		value = v;
+	}
+}
+```
+
+所有 Entry 对象都被 ThreadLocalMap 类实例化对象 threadLocals 持有。当线程对象执行完毕时，线程对象内的实例属性均会被垃圾回收。源码中的红色字标识的 ThreadLocal 的弱引用，即使线程正在执行中， 只要 ThreadLocal 对象引用被置成 null, Entry 的 Key 就会自动在下一次 YGC 时被垃圾回收。而在 ThreadLocal 使用 set() 和 get() 又会自动地将那些 key == null 的 value 置为 null，使 value 能够被垃圾回收，避免内存泄漏，但是理想很丰满，现实很骨感，ThreadLocal 如源码注释所述：
+
+ThreadLocal 对象通常作为私有静态变量使用，那么其生命周期至少不会随着线程结束而结束。
+
+线程使用 ThreadLocal 有三个重要方法：
+1. set()：如果没有 set 操作的 ThreadLocal ，容易引起脏数据问题。
+2. get()：始终没有 get 操作的 ThreadLocal 对象是没有意义的。
+3. remove()：如果没有 rcmove 操作，容易引起内存泄露。
+
+ThreadLocal ，它通常用于同一个线程内，跨类、跨方法传递数据。如果没有 ThreadLocal ，那么相互之间的信息传递，势必要靠返回值和参数，这样无形之中，有些类甚至有些框架会互相耦合。
+
+通过 Thread 构造方法，可以把当前线程的变量继续往下传递给它创建的子线程，源码如下：
+
+```Java
+public Thread(ThreadGroup group, Runnable target, String name,
+				long stackSize) {
+	init(group, target, name, stackSize);
+}
+
+private void init(ThreadGroup g, Runnable target, String name,
+                      long stackSize) {
+	init(g, target, name, stackSize, null, true);
+}
+
+private void init(ThreadGroup g, Runnable target, String name,
+					long stackSize, AccessControlContext acc,
+					boolean inheritThreadLocals) {
+	if (name == null) {
+		throw new NullPointerException("name cannot be null");
+	}
+	this.name = name;
+
+	Thread parent = currentThread();
+	SecurityManager security = System.getSecurityManager();
+	if (g == null) {
+		// 确定它是否是小程序
+		// 如果有安全管理器，请询问安全管理器做什么。
+		if (security != null) {
+			g = security.getThreadGroup();
+		}
+
+		// 如果安全管理器对这件事没有强烈的意见，请使用父线程组。
+		if (g == null) {
+			g = parent.getThreadGroup();
+		}
+	}
+
+		// 无论是否显式传入线程组，都要检查访问。
+	g.checkAccess();
+
+	// 我们有必要的权限吗
+	if (security != null) {
+		if (isCCLOverridden(getClass())) {
+		security.checkPermission(SUBCLASS_IMPLEMENTATION_PERMISSION);
+		}
+	}
+
+	g.addUnstarted();
+
+	this.group = g;
+	this.daemon = parent.isDaemon();
+	this.priority = parent.getPriority();
+	if (security == null || isCCLOverridden(parent.getClass()))
+		this.contextClassLoader = parent.getContextClassLoader();
+	else
+		this.contextClassLoader = parent.contextClassLoader;
+	this.inheritedAccessControlContext =
+			acc != null ? acc : AccessController.getContext();
+	this.target = target;
+	setPriority(priority);
+	if (inheritThreadLocals && parent.inheritableThreadLocals != null)
+	// createlnheritedMap() 其实就是调用 ThreadLocalMap 的私有构造方法来产生一个实例对象，把父线程的不为 null 的线程变量都拷贝过来
+		this.inheritableThreadLocals =
+			ThreadLocal.createInheritedMap(parent.inheritableThreadLocals);
+	// 存储指定的堆栈大小，以防VM关心
+	this.stackSize = stackSize;
+
+	// 设置线程ID
+	tid = nextThreadID();
+}
+
+static ThreadLocalMap createInheritedMap(ThreadLocalMap parentMap) {
+	return new ThreadLocalMap(parentMap);
+}
+
+private ThreadLocalMap(ThreadLocalMap parentMap) {
+	// table 就是存储
+	Entry[] parentTable = parentMap.table;
+	int len = parentTable.length;
+	setThreshold(len);
+	table = new Entry[len];
+
+	for (int j = 0; j < len; j++) {
+		Entry e = parentTable[j];
+		if (e != null) {
+			@SuppressWarnings("unchecked")
+			ThreadLocal<Object> key = (ThreadLocal<Object>) e.get();
+			if (key != null) {
+				Object value = key.childValue(e.value);
+				Entry c = new Entry(key, value);
+				int h = key.threadLocalHashCode & (len - 1);
+				while (table[h] != null)
+					h = nextIndex(h, len);
+				table[h] = c;
+				size++;
+			}
+		}
+	}
+}
+```
+淘宝在很多场景下就是通过 ThreadLocal 来透传全局上下文的，比如用 ThreadLocal 来存储监控系统的某个标记位，暂且命名为 traceId 。某次请求下所有的 traceld 都是一致的，以获得可以统一解析的日志文件。但在实际开发过程中，发现子线程里的 traceld 为 null ，跟主线程的 traceId 并不一致，所以这就需要刚才说到的 InheritableThreadLocal 来解决父子线程之间共享线程变量的问题，使整个连接过程中 traceId 一致。实现代码如下所示：
+
+```Java
+public class RequestProcessTrace {
+	private static final InheritableThreadLocal<FullLinkContext> FULL_LINK_THREADLOCAL = new InheritableThreadLocal<>();
+	public static FullLinkContext getContext() {
+		FullLinkContext fullLinkContext = FULL_LINK_THREADLOCAL.get();
+		if (fullLinkContext == null ) {
+			FULL_LINK_THREADLOCAL.set(new FullLinkContext()) ;
+			fullLinkContext = FULL_LINK_THREADLOCAL.get () ;
+		}
+		return fullLinkContext;
+	}
+
+	public static class FullLinkContext {
+		private String traceId;
+		public String getTraceid () {
+			if (StringUtils.isEmpty(traceid)) {
+				FrameWork.startTrace(null, "gujin");
+				traceid = FrameWork.getTraceId();
+			}
+			return traceId;
+		}
+		public void setTraceid(String traceid) {
+			this.traceId = traceId;
+		}
+	}
+}
+```
+
+使用 ThreadLocal 和 InheritableThreadLocal 透传上下文时，需要注意线程间切换、异常传输时的处理，避免在传输过程中因处理不当而导致的上下文丢失。
+
+最后， SimpleDateFormat 是线程不安全的类，定义为 static 对象，会有数据同步风险。通过源码可以看出， SimpleDateFonnat 内部有一个 Calendar 对象，在日期转字符串或字符串转日期的过程中，多线程共享时有非常高的概率产生错误，推荐的方式之一就是使用 ThreadLocal，让每个线程单独拥有这个对象。示例代码如下：
+
+```Java
+private static final ThreadLocal<DataFormat> DATE_FORMAT_THREADLOCAL = new ThreadLocal<DateFormat>() {
+    @Override
+    protected DateFormat initialValue() {
+        return new SimpleDataFormat("yyyy-MM-dd");
+    }
+}
+```
+
+#### Thread Local 副作用
+
+ThreadLocal 的主要问题是会产生脏数据和内存泄漏。这两个问题通常是在线程池的线程中使用 ThreadLocal 引发的，因为线程池有线程复用和内存常驻两个特点。
+
+1. 脏数据
+
+线程复用会产生脏数据。由于线程池会重用 Thread 对象 ，那么与 Thread 绑定类的静态属性 ThreadLocal 变量也会被重用。如果在实现的线程 run() 方法体中不显式地调用 remove() 清理与线程相关的 ThreadLocal 信息，那么倘若下一个线程不调用set() 设置初始值，就可能 get() 到重用的线程信息，包括 ThreadLocal 所关联的线程对象的 value 值。
+
+2. 内存泄漏
+
+在源码注释中提示使用 static 关键字来修饰 ThreadLocal 。在此场景下 ，寄希望于 ThreadLocal 对象失去引用后，触发弱引用机制来回收 Entry 的 Value 就不现实了。在上例中，如果不进行 remove() 操作，那么这个线程执行完成后，通过 ThreadLocal 对象持有的 String 对象是不会被释放的。
+
+以上两个问题的解决办法很简单，就是在每次用完 ThreadLocal 时， 必须要及时调用 remove() 进行清理。
+
+# 第八章 单元测试
+
+p278
