@@ -1,5 +1,3 @@
-
-
 # 第一章 计算机基础
 
 ## 1.1 走进0与1的世界
@@ -1498,7 +1496,36 @@ ArrayList 使用无参构造时，默认大小为 10 ，也就是说在第一次
 
 再来看一下 HashMap ，如果它需要放置 1000 个元素 ，同样没有设置初始容量大小，随着元素的不断增加，则需要被动扩容 7 次才可以完成存储。扩容时需要重建 hash 表非常影响性能。在 HashMap 中有两个比较重要的参数：Capacity Load Factor ，其中 Capacity 决定了存储容量的大小，默认为 16 ，而 LoadFactor 决定了填充比例，一般使用默认的 0.75 。基于这两个参数的乘积， HashMap 内部用 threshold 变量表示 HashMap 中能放入的元素个数。HashMap 容量并不会在 new 的时候分配，而是在第一次 put 的时候完成创建的，源码如下：
 
-![1566223759378](E:\git_repo\Hao_Learn\2019\8\img\1566223759378.png)
+```Java
+public V put(K key, V value) {
+	if (table == EMPTY_TABLE) {
+		inflateTable(threshold);
+	}
+	// ...
+}
+
+private void inflateTable(int toSize) {
+	// Find a power of 2 >= toSize
+	int capacity = roundUpToPowerOf2(toSize);
+
+	threshold = (int) Math.min(capacity * loadFactor, MAXIMUM_CAPACITY + 1);
+	table = new Entry[capacity];
+	initHashSeedAsNeeded(capacity);
+}
+
+final boolean initHashSeedAsNeeded(int capacity) {
+	boolean currentAltHashing = hashSeed != 0;
+	boolean useAltHashing = sun.misc.VM.isBooted() &&
+			(capacity >= Holder.ALTERNATIVE_HASHING_THRESHOLD);
+	boolean switching = currentAltHashing ^ useAltHashing;
+	if (switching) {
+		hashSeed = useAltHashing
+			? sun.misc.Hashing.randomHashSeed(this)
+			: 0;
+	}
+	return switching;
+}
+```
 
 为了提高运算速度，设定 HashMap 容量大小为 2^n^，这样的方式使计算落槽位置更快。如果初始化 HashMap 的时候通过构造器指定了 initialCapacity ，则会先计算出比 initialCapacity 大的 2 的幂存入 threshold ，在第一次 put 时会按照这个 2 的幂初始化数组大小，此后每次扩容都是增加 2 倍。如果没有指定初始值， log~2~1000 = 9.96 ，结合源码分析可知，如果想要容纳 1000 个元素，必须经过 7 次扩容。HashMap 的扩容还是有不小的成本的，如果提前能够预估出 HashMap 内要放置的元素数量，就可以在初始化时合理设置容量大小，避免不断扩容带来的性能损耗。
 
@@ -2152,20 +2179,184 @@ HashMap 的死链问题及扩容数据丢失问题是慎用 HashMap 的两个主
 
 例如，某个应用在 init() 方法中初始化一个 static 的 HashMap 集合对象，从数据库提取数据到集合中。应用启动过程中仅单线程调用一次初始化方法，不应该有任何问题。但机缘巧合下 init()， 被执行了两次，启动失败、 CPU 使用率飙升， dump 分析发现存在HashMap 死链。第1种解决方案是用ConcurrentHashMap 替代 HashMap；第2种解决方案是使用 `Collections.synchronizedMap(hashMap)` 包装成同步集合，第3种解决方案是对init() 同步操作 。此案例最终选择第3种解决方案，毕竟只有启动时调用而已。
 
-p211
+![1566910336828](E:\git_repo\Hao_Learn\2019\8\img\1566910336828.png)
 
+JDK 7 HashMap 新增元素的过程：
 
+```Java
+public V put(K key, V value) {
+	// 数组为空，则初始化扩容
+	if (table == EMPTY_TABLE) {
+		inflateTable(threshold);
+	}
+	// 存储空键的KV对
+	if (key == null)
+		return putForNullKey(value);
+	int hash = hash(key);
+	int i = indexFor(hash, table.length);
+	// 此循环通过 hashCode 返回值找到对应的数组下标位置
+	for (Entry<K,V> e = table[i]; e != null; e = e.next) {
+		Object k;
+		// 为了覆盖旧值
+		if (e.hash == hash && ((k = e.key) == key || key.equals(k))) {
+			V oldValue = e.value;
+			e.value = value;
+			e.recordAccess(this);
+			return oldValue;
+		}
+	}
 
+	// 还没有添加元素就进行 modCount++，将为后续留下很多隐患
+	modCount++;
+	// 添加元素，参数i为table数组的下标
+	addEntry(hash, key, value, i);
+	return null;
+}
+
+void addEntry(int hash, K key, V value, int bucketIndex) {
+	// 如果元素的个数达到扩容阈值threshold且数组下标位置已经存在元素，则进行扩容
+	if ((size >= threshold) && (null != table[bucketIndex])) {
+		// 扩容2倍，size是实际存放元素的个数，而length是数组的容量大小
+		resize(2 * table.length);
+		hash = (null != key) ? hash(key) : 0;
+		bucketIndex = indexFor(hash, table.length);
+	}
+
+	createEntry(hash, key, value, bucketIndex);
+}
+
+// 插入元素时，应插入头部，而不是尾部
+void createEntry(int hash, K key, V value, int bucketIndex) {
+	// 不管原来的数组对应的下标元素是否为null，都作为Entry的bucketIndex的next值
+	Entry<K,V> e = table[bucketIndex]; // （第1处）
+	// 即使原来是链表，也把整条链都挂在新插入的节点下
+	table[bucketIndex] = new Entry<>(hash, key, value, e);
+	size++;
+}
+```
+在 createEntry() 方法中，新添加的元素直接放在 slot 槽上，使新添加的元素在下次提取时可以更快地被访问到。如果两个线程同时执行到第 1 处时，那么一个线程的赋值就会被另一个覆盖掉，这是对象丢失的原因之一。
+
+![1566912645677](E:\git_repo\Hao_Learn\2019\8\img\1566912645677.png)
+
+理想的哈希集合对象的存放应该符合：
+
+- 只要对象不一样，hashCode 就不一样；
+- 只要 hashCode 不一样，得到的 hashCode 与 hashSeed 位运算的 hash 就不一样；
+- 只要 hash 不一样，存放在数组上的 slot 就不一样。
+
+晗希碰撞的概率取决于 hashCode 计算方式和空间容量大小。
+
+JDK7中 resize () 是如何进行数据迁移的：
+```Java
+void resize(int newCapacity) {
+	// 获取旧表
+	Entry[] oldTable = table;
+	int oldCapacity = oldTable.length;
+	// int MAXIMUM_CAPACITY = 1073741824 = 1 << 30
+	if (oldCapacity == MAXIMUM_CAPACITY) {
+		// 扩容阈值设置为 ‭2147483647‬，并返回，不能再扩容了
+		threshold = Integer.MAX_VALUE;
+		return;
+	}
+	Entry[] newTable = new Entry[newCapacity];
+	// JDK8移除hashSeed计算，因为计算时会调用Random.nextInt()，存在性能问题
+	transfer(newTable, initHashSeedAsNeeded(newCapacity));
+	// 在此步骤完成前，旧表上依然可以进行元素的增加操作，这是对象丢失的原因之一
+	table = newTable;
+	threshold = (int)Math.min(newCapacity * loadFactor, MAXIMUM_CAPACITY + 1);
+}
+
+// 从旧表迁移数据到新表
+void transfer(Entry[] newTable, boolean rehash) {
+	// 新表大小已经指定为2 * oldTable.length
+	int newCapacity = newTable.length;
+	// 使用 foreach 方式遍历整个数组
+	for (Entry<K,V> e : table) {
+		// 如果此 slot 上存在元素，则进行链表遍历（也有可能是单个节点），
+		// 直到null != e，退出循环
+		while(null != e) {
+			Entry<K,V> next = e.next;
+			// 当前元素总是直接放在数组下标的 slot 上．而不是放在链表的最后
+			if (rehash) {
+				e.hash = null == e.key ? 0 : hash(e.key);
+			}
+			int i = indexFor(e.hash, newCapacity);
+			// 因为新数组上可能有元素（没有的话就是null），
+			// 所以把原来 slot 上的元素作为 e.next
+			// 新迁移过来的节点直接放置在 slot 位置上
+			// 形象来说就是，将节点放入两者之间
+			e.next = newTable[i];
+			newTable[i] = e;
+			// 链表继续向下遍历
+			e = next;
+		}
+	}
+}
+```
+
+transfer() 数据迁移方法在数组非常大时会非常消耗资源。当前线程迁移过程中，其他线程新增的元素有可能落在已经遍历过的哈希槽上，在遍历完成之后 table 数组引用指向了 newTable 这时新增元素就会丢失，被无情地垃圾回收。
+
+如果 resize 完成，执行了 table = newTable ，则后续的元素就可以在新表上进行插入操作。但是如果多个线程同时执行 resize ，每个线程又都会 `new Entry[newCapacity]`， 这是线程内的局部数组对象，线程之间是不可见的。迁移完成后，resize 的线程会赋值给 table 线程共享变量，从而覆盖其他线程的操作，因此在其他线程进行插入中，之前操作的对象会被无情地丢弃。
+
+HashMap 在高并发场景中，新增对象丢失原因如下：
+
+- 并发赋值时被覆盖。
+- 己遍历区间新增元素会丢失。
+- 新表被覆盖。
+- 迁移丢失。在迁移过程中，有并发时， next 被提前置成 null。
+
+数据丢失是 HashMap 除死链外带入的另一个高并发问题，但通常不被重视。因为数据丢失的环节非常长，而且不会形成脏数据，所以不易察觉，不像死链那样火烧眉毛，比较明显。
+
+接下来分析死链问题，transfer() 正是生产死链的地下黑工厂：
+
+![1566914930388](E:\git_repo\Hao_Learn\2019\8\img\1566914930388.png)
+
+扩展说明一下，由于 Integer 的 hashCode() 就是自身的值，因此有些人误以为Long 的 hashCode() 也是自身值,实际并非如此。以图 6-23 为例,先获取 Long    ( 1534820390196514000L ）的二进制值，然后右移 32 位后,再与原来的值进行异或，最后进行 int 的强制类型转换，相当于高位被截掉，如图 6-23 阴影部分所示。
+
+![1566914813338](E:\git_repo\Hao_Learn\2019\8\img\1566914813338.png)
+
+这样做的原因是 hashCode 的返回值是 int ，如果此集合内某些 Key 是由 int 向上转型而来的，那些 long 的值直接截取高位，会形成很大的冲突；如果仅拿高位，当 long 的取值范围在`Integer.MAX_VALUE` 内时，结果都是0。所以将高位与低位进行异或，有助于泊松分布。
+
+![1566915116476](E:\git_repo\Hao_Learn\2019\8\img\1566915116476.png)
+
+而对于死链的生成，需要先明确三点：
+1. 原先没有死链的同一个 slot 上节点遍历一定能够按顺序走完。因为 e 和next 都是线程内的局部变量，是绝对不会互相干扰的，所以 while 循环在此次生成死链的过程中是会正常退出的。
+2. table 数组是各线程都可以共享修改的对象。
+3. put()、get()、transfer() 三种操作在运行到此拥有死链的 slot 上，CPU使用率都会飙升。
+
+两个线程 A 和 B执行 transfer 方法，虽然 newTable 是局部变量，但是原先table 中的 Entry 链表是共享的。产生问题的根源是 Entry 的 next 被并发修改。这可能导致：
+1. 对象丢失。
+2. 两个对象互链。
+3. 对象自己互链。
+形成环路的原因是两个线程都执行完第一个节点的遍历操作后，到第二个节点时，产生互链，如图 6-26 所示。
+
+![1566915653875](E:\git_repo\Hao_Learn\2019\8\img\1566915653875.png)
+
+JDK7 是先扩容，然后进行新增元素操作， JDK8 是增加元素之后扩容。
+
+JDK8 的 HashMap 改进了这种从头节点就开始操作数据迁移的做法，采用对原先链表的头尾节点引用，保证“有序性”。
+
+#### ConcurrentHashMap 
+
+p223
 
 # 第七章 并发与多线程
 
 ## 7.1 线程安全
 
+p231
+
 ## 7.2 什么是锁
+
+p235
 
 ## 7.3 线程同步
 
+p238
+
 ## 7.4 线程池
+
+p247
 
 ## 7.5 ThreadLocal
 

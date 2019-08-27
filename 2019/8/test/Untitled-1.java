@@ -1,3 +1,5 @@
+import java.util.HashMap;
+
 public V put(K key, V value) {
 	// 先把 TreeMap 的根节点 root 引用赋值给当前节点
 	Entry<K,V> t = root;
@@ -530,5 +532,293 @@ public class RequestProcessTrace {
 		public void setTraceid(String traceid) {
 			this.traceId = traceId;
 		}
+	}
+}
+
+HashMap
+//JDK7
+
+public V put(K key, V value) {
+	// 数组为空，则初始化扩容
+	if (table == EMPTY_TABLE) {
+		inflateTable(threshold);
+	}
+	// 存储空键的KV对
+	if (key == null)
+		return putForNullKey(value);
+	int hash = hash(key);
+	int i = indexFor(hash, table.length);
+	// 此循环通过 hashCode 返回值找到对应的数组下标位置
+	for (Entry<K,V> e = table[i]; e != null; e = e.next) {
+		Object k;
+		// 为了覆盖旧值
+		if (e.hash == hash && ((k = e.key) == key || key.equals(k))) {
+			V oldValue = e.value;
+			e.value = value;
+			e.recordAccess(this);
+			return oldValue;
+		}
+	}
+
+	// 还没有添加元素就进行 modCount++，将为后续留下很多隐患
+	modCount++;
+	// 添加元素，参数i为table数组的下标
+	addEntry(hash, key, value, i);
+	return null;
+}
+
+void addEntry(int hash, K key, V value, int bucketIndex) {
+	// 如果元素的个数达到扩容阈值threshold且数组下标位置已经存在元素，则进行扩容
+	if ((size >= threshold) && (null != table[bucketIndex])) {
+		// 扩容2倍，size是实际存放元素的个数，而length是数组的容量大小
+		resize(2 * table.length);
+		hash = (null != key) ? hash(key) : 0;
+		bucketIndex = indexFor(hash, table.length);
+	}
+
+	createEntry(hash, key, value, bucketIndex);
+}
+
+// 插入元素时，应插入头部，而不是尾部
+void createEntry(int hash, K key, V value, int bucketIndex) {
+	// 不管原来的数组对应的下标元素是否为null，都作为Entry的bucketIndex的next值
+	Entry<K,V> e = table[bucketIndex];
+	// 即使原来是链表，也把整条链都挂在新插入的节点下
+	table[bucketIndex] = new Entry<>(hash, key, value, e);
+	size++;
+}
+
+void resize(int newCapacity) {
+	// 获取旧表
+	Entry[] oldTable = table;
+	int oldCapacity = oldTable.length;
+	// int MAXIMUM_CAPACITY = 1073741824 = 1 << 30
+	if (oldCapacity == MAXIMUM_CAPACITY) {
+		// 扩容阈值设置为 ‭2147483647‬，并返回，不能再扩容了
+		threshold = Integer.MAX_VALUE;
+		return;
+	}
+	Entry[] newTable = new Entry[newCapacity];
+	// JDK8移除hashSeed计算，因为计算时会调用Random.nextInt()，存在性能问题
+	transfer(newTable, initHashSeedAsNeeded(newCapacity));
+	// 在此步骤完成前，旧表上依然可以进行元素的增加操作，这是对象丢失的原因之一
+	table = newTable;
+	threshold = (int)Math.min(newCapacity * loadFactor, MAXIMUM_CAPACITY + 1);
+}
+
+// 从旧表迁移数据到新表
+void transfer(Entry[] newTable, boolean rehash) {
+	// 新表大小已经指定为2 * oldTable.length
+	int newCapacity = newTable.length;
+	// 使用 foreach 方式遍历整个数组
+	for (Entry<K,V> e : table) {
+		// 如果此 slot 上存在元素，则进行链表遍历（也有可能是单个节点），
+		// 直到null != e，退出循环
+		while(null != e) {
+			Entry<K,V> next = e.next;
+			// 当前元素总是直接放在数组下标的 slot 上．而不是放在链表的最后
+			if (rehash) {
+				e.hash = null == e.key ? 0 : hash(e.key);
+			}
+			int i = indexFor(e.hash, newCapacity);
+			// 因为新数组上可能有元素（没有的话就是null），
+			// 所以把原来 slot 上的元素作为 e.next
+			// 新迁移过来的节点直接放置在 slot 位置上
+			// 形象来说就是，将节点放入两者之间
+			e.next = newTable[i];
+			newTable[i] = e;
+			// 链表继续向下遍历
+			e = next;
+		}
+	}
+}
+
+
+//JDK8
+public V put(K key, V value) {
+	return putVal(hash(key), key, value, false, true);
+}
+
+final V putVal(int hash, K key, V value, boolean onlyIfAbsent,
+                   boolean evict) {
+	Node<K,V>[] tab; Node<K,V> p; int n, i;
+	if ((tab = table) == null || (n = tab.length) == 0)
+		n = (tab = resize()).length;
+	if ((p = tab[i = (n - 1) & hash]) == null)
+		tab[i] = newNode(hash, key, value, null);
+	else {
+		Node<K,V> e; K k;
+		if (p.hash == hash &&
+			((k = p.key) == key || (key != null && key.equals(k))))
+			e = p;
+		else if (p instanceof TreeNode)
+			e = ((TreeNode<K,V>)p).putTreeVal(this, tab, hash, key, value);
+		else {
+			for (int binCount = 0; ; ++binCount) {
+				if ((e = p.next) == null) {
+					p.next = newNode(hash, key, value, null);
+					if (binCount >= TREEIFY_THRESHOLD - 1) // -1 for 1st
+						treeifyBin(tab, hash);
+					break;
+				}
+				if (e.hash == hash &&
+					((k = e.key) == key || (key != null && key.equals(k))))
+					break;
+				p = e;
+			}
+		}
+		if (e != null) { // existing mapping for key
+			V oldValue = e.value;
+			if (!onlyIfAbsent || oldValue == null)
+				e.value = value;
+			afterNodeAccess(e);
+			return oldValue;
+		}
+	}
+	++modCount;
+	if (++size > threshold)
+		resize();
+	afterNodeInsertion(evict);
+	return null;
+}
+
+final Node<K,V>[] resize() {
+	Node<K,V>[] oldTab = table;
+	int oldCap = (oldTab == null) ? 0 : oldTab.length;
+	int oldThr = threshold;
+	int newCap, newThr = 0;
+	if (oldCap > 0) {
+		if (oldCap >= MAXIMUM_CAPACITY) {
+			threshold = Integer.MAX_VALUE;
+			return oldTab;
+		}
+		else if ((newCap = oldCap << 1) < MAXIMUM_CAPACITY &&
+				 oldCap >= DEFAULT_INITIAL_CAPACITY)
+			newThr = oldThr << 1; // double threshold
+	}
+	else if (oldThr > 0) // initial capacity was placed in threshold
+		newCap = oldThr;
+	else {               // zero initial threshold signifies using defaults
+		newCap = DEFAULT_INITIAL_CAPACITY;
+		newThr = (int)(DEFAULT_LOAD_FACTOR * DEFAULT_INITIAL_CAPACITY);
+	}
+	if (newThr == 0) {
+		float ft = (float)newCap * loadFactor;
+		newThr = (newCap < MAXIMUM_CAPACITY && ft < (float)MAXIMUM_CAPACITY ?
+				  (int)ft : Integer.MAX_VALUE);
+	}
+	threshold = newThr;
+	@SuppressWarnings({"rawtypes","unchecked"})
+		Node<K,V>[] newTab = (Node<K,V>[])new Node[newCap];
+	table = newTab;
+	if (oldTab != null) {
+		for (int j = 0; j < oldCap; ++j) {
+			Node<K,V> e;
+			if ((e = oldTab[j]) != null) {
+				oldTab[j] = null;
+				if (e.next == null)
+					newTab[e.hash & (newCap - 1)] = e;
+				else if (e instanceof TreeNode)
+					((TreeNode<K,V>)e).split(this, newTab, j, oldCap);
+				else { // preserve order
+					Node<K,V> loHead = null, loTail = null;
+					Node<K,V> hiHead = null, hiTail = null;
+					Node<K,V> next;
+					do {
+						next = e.next;
+						if ((e.hash & oldCap) == 0) {
+							if (loTail == null)
+								loHead = e;
+							else
+								loTail.next = e;
+							loTail = e;
+						}
+						else {
+							if (hiTail == null)
+								hiHead = e;
+							else
+								hiTail.next = e;
+							hiTail = e;
+						}
+					} while ((e = next) != null);
+					if (loTail != null) {
+						loTail.next = null;
+						newTab[j] = loHead;
+					}
+					if (hiTail != null) {
+						hiTail.next = null;
+						newTab[j + oldCap] = hiHead;
+					}
+				}
+			}
+		}
+	}
+	return newTab;
+}
+
+final TreeNode<K,V> putTreeVal(HashMap<K,V> map, Node<K,V>[] tab,
+                                       int h, K k, V v) {
+	Class<?> kc = null;
+	boolean searched = false;
+	TreeNode<K,V> root = (parent != null) ? root() : this;
+	for (TreeNode<K,V> p = root;;) {
+		int dir, ph; K pk;
+		if ((ph = p.hash) > h)
+			dir = -1;
+		else if (ph < h)
+			dir = 1;
+		else if ((pk = p.key) == k || (k != null && k.equals(pk)))
+			return p;
+		else if ((kc == null &&
+					(kc = comparableClassFor(k)) == null) ||
+					(dir = compareComparables(kc, k, pk)) == 0) {
+			if (!searched) {
+				TreeNode<K,V> q, ch;
+				searched = true;
+				if (((ch = p.left) != null &&
+						(q = ch.find(h, k, kc)) != null) ||
+					((ch = p.right) != null &&
+						(q = ch.find(h, k, kc)) != null))
+					return q;
+			}
+			dir = tieBreakOrder(k, pk);
+		}
+
+		TreeNode<K,V> xp = p;
+		if ((p = (dir <= 0) ? p.left : p.right) == null) {
+			Node<K,V> xpn = xp.next;
+			TreeNode<K,V> x = map.newTreeNode(h, k, v, xpn);
+			if (dir <= 0)
+				xp.left = x;
+			else
+				xp.right = x;
+			xp.next = x;
+			x.parent = x.prev = xp;
+			if (xpn != null)
+				((TreeNode<K,V>)xpn).prev = x;
+			moveRootToFront(tab, balanceInsertion(root, x));
+			return null;
+		}
+	}
+}
+
+final void treeifyBin(Node<K,V>[] tab, int hash) {
+	int n, index; Node<K,V> e;
+	if (tab == null || (n = tab.length) < MIN_TREEIFY_CAPACITY)
+		resize();
+	else if ((e = tab[index = (n - 1) & hash]) != null) {
+		TreeNode<K,V> hd = null, tl = null;
+		do {
+			TreeNode<K,V> p = replacementTreeNode(e, null);
+			if (tl == null)
+				hd = p;
+			else {
+				p.prev = tl;
+				tl.next = p;
+			}
+			tl = p;
+		} while ((e = e.next) != null);
+		if ((tab[index] = hd) != null)
+			hd.treeify(tab);
 	}
 }
