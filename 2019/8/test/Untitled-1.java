@@ -822,3 +822,54 @@ final void treeifyBin(Node<K,V>[] tab, int hash) {
 			hd.treeify(tab);
 	}
 }
+
+Entry<K, V> next = e.next; 
+e.next = newTable[i];
+newTable[i] = e;
+e = next;
+
+ConcurrentHashMap
+// 默认为null，ConcurrentHashMap 存放数据的地方，扩容时大小总是2的幂次方
+// 初始化发生在第一次插入操作，数组默认初始化大小为 16
+transient volatile Node<K,V>[] table;
+// 默认为null，扩容时新生成的数组，其大小为原数组的两倍
+private transient volatile Node<K,V>[] nextTable;
+// 存储单个KV数据节点。内部有 key、value、hash、next 指向下一个节点
+// 它有4个在 ConcurrentHashMap 类内部定义的子类：
+// TreeBin、TreeNode、ForwardingNode、ReservationNode
+// 前3个子类都重写了查找元素的重要方法 find()
+static class Node<K,V> implements Map.Entry<K,V> { ... }
+
+// 它并不存储实际数据，维护对桶内红黑树的读写锁，存储对红黑树节点的引用
+static final class TreeBin<K,V> extends Node<K,V> { ... }
+// 在红黑树结构中，实际存储数据的节点
+static final class TreeNode<K,V> extends Node<K,V> { ... }
+// 扩容转发节点，放置此节点后，外部对原有哈希槽的操作会转发到 nextTable 上
+static final class ForwardingNode<K,V> extends Node<K,V> { ... }
+// 占位加锁节点。执行某些方法时，对其加锁，如 computeIfAbsent 等
+static final class ReservationNode<K,V> extends Node<K,V> { ... }
+
+// 默认为0，用来控制table的初始化和扩容操作
+// sizeCtl = -1，表示正在初始化中
+// sizeCtl = -n，表示（n-1）个线程正在进行扩容，即-1 -（线程数）
+// sizeCtl > 0，初始化或扩容中需要使用的容量
+// sizeCtl = 0，默认值，使用默认容量进行初始化
+private transient volatile int sizeCtl;
+// 集合size小于64，无论如何，都不会使用红黑树结构
+// 转化为红黑树还有一个条件是 TREEIFY_THRESHOLD
+static final int MIN_TREEIFY_CAPACITY = 64;
+// 同一个哈希桶内存储的元素个数超过此阈值时
+// 存储结构有链表转换为红黑树
+static final int TREEIFY_THRESHOLD = 8;
+// 同一个哈希桶内存储的元素个数小于等于此阈值时
+// 从红黑树回退至链表结构，因为元素个数较少时，链表更快
+static final int UNTREEIFY_THRESHOLD = 6;
+
+// 记录了元素总数值，主要用在无竞争状态下
+// 在总数更新后，通过 CAS 方式直接更新这个值
+private transient volatile long baseCount;
+// 一个计数器单元．维护了一个 value 值
+@sun.misc.Contended static final class CounterCell { ... }
+// 在竟争激烈的状态下启用，线程会把总数更新情况存放到该结构内
+// 当竞争进一步加剧时，会通过扩容减少竞争
+private transient volatile CounterCell[] counterCells;

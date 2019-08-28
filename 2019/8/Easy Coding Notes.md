@@ -1125,7 +1125,7 @@ public static void main(String[] args) {
 
 1. Heap（堆区）
 
-​        Heap 是 OOM 故障最主要的发源地，它存储着几乎所有的实例对象，堆由垃圾收集器自动回收，堆区由各子线程共享使用。通常情况下，它占用的空间是所有内存区域中最大的，但如果无节制地创建大量对象，也容易消耗完所有的空间。堆的内存空间既可以固定大小，也可以在运行时动态地调整，通过如下参数设定初始值和最大值，比如 `-Xms256M -Xmxl024M` ，其中`-X`表示它是 JVM 运行参数， ms 是 memory start 的简称， mx 是 memory max 的简称，分别代表最小堆容量和最大容窑量。但是在通常情况下，服务器在运行过程中，堆空间不断地扩容与回缩，势必形成不必要的系统压力，所以在线上生产环境中 JVM 的 Xms 和 Xmx 设置成一样大小，避免在 GC 后调整堆大小时带来的额外压力。
+​        Heap 是 OOM 故障最主要的发源地，它存储着几乎所有的实例对象，堆由垃圾收集器自动回收，堆区由各子线程共享使用。通常情况下，它占用的空间是所有内存区域中最大的，但如果无节制地创建大量对象，也容易消耗完所有的空间。堆的内存空间既可以固定大小，也可以在运行时动态地调整，通过如下参数设定初始值和最大值，比如 `-Xms256M -Xmxl024M` ，其中`-X`表示它是 JVM 运行参数， ms 是 memory start 的简称， mx 是 memory max 的简称，分别代表最小堆容量和最大容量。但是在通常情况下，服务器在运行过程中，堆空间不断地扩容与回缩，势必形成不必要的系统压力，所以在线上生产环境中 JVM 的 Xms 和 Xmx 设置成一样大小，避免在 GC 后调整堆大小时带来的额外压力。
 
 ​        堆分成两大块：新生代和老年代。对象产生之初在新生代，步入暮年时进入老年代，但是老年代也接纳在新生代无法容纳的超大对象。
 ​        新生代 = 1个 Eden 区＋Survivor 区。绝大部分对象在 Eden 区生成，当Eden 区装填满的时候，会触发 Young Garbage Collection ，即 YGC。垃圾回收的时候，在 Eden 区实现清除策略，没有被引用的对象则直接回收。依然存活的对象会被移送到 Survivor 区，这个区真是名副其实的存在。Survivor 区分为 S0 和 S1 两块内存空间，送到哪块空间呢？每次 YGC 的时候， 将存活的对象复制到未使用的那块空间，然后将当前正在使用的空间完全清除，交换两块空间的使用状态。如果 YGC 要移送的对象大于 Survivor 区容量的上限 ，则直接移交给老年代。假如一些没有进取心的对象以为可以一直在新生代的 Survivor 区交换来交换去，那就错了。每个对象都有一个计数器，每次 YGC 都会加1。
@@ -1458,7 +1458,7 @@ private static final Logger logger= LoggerFactory.getLogger(Abc.class);
 
 List 集合是线性数据结构的主要实现，集合元素通常存在明确的上一个和下一个元素，也存在明确的第一个元素和最后一个元素。List 集合的遍历结果是稳定的。该体系最常用的是 ArrayList 和 LinkedList 两个集合类。
 
-Array List 是窑量可以改变的非线程安全集合。内部实现使用数组进行存储，集
+Array List 是容量可以改变的非线程安全集合。内部实现使用数组进行存储，集
 合扩容时会创建更大的数组空间，把原有数据复制到新数组中。 ArrayList 支持对元素的快速随机访问，但是插入与删除时速度通常很慢，因为这个过程很有可能需要移动其他元素。
 
 LinkedList 的本质是双向链表。与 ArrayList 相比 ，LinkedList 的插入和删除速度更快，但是随机访问速度则很慢。测试表明，对于 10 万条的数据，与 ArrayList 相比，随机提取元素时存在数百倍的差距。除继承 AbstractList 抽象类外， LinkedList 还实现了另一个接口 Deque ，即 `double-ended queue` 。这个接口同时具有队列和栈的性质。LinkedList 包含 3 个重要的成员：size 、frist 、last。size 是双向链表中节点的个数。first 和 last 分别指向第一个和最后一个节点的引用。 LinkedList 的优点在于可以将零散的内存单元通过附加引用的方式关联起来，形成按链路顺序查找的线性结构，内存利用率较高。
@@ -2338,7 +2338,99 @@ JDK8 的 HashMap 改进了这种从头节点就开始操作数据迁移的做法
 
 #### ConcurrentHashMap 
 
-p223
+JDK8 对 ConcurrentHashMap 进行了脱胎换骨式的改造，使用了大量的 lock-free 技术来减轻因锁的竞争而对性能造成的影响。它是学习并发编程的一个绝佳示例，此类超过 6300 行代码，涉及 volatile、CAS、锁、链表、红黑树等众多知识点。
+
+ConcurrentHashMap 是在 JDK5 中引入的线程安全的哈希式集合，在 JDK8 之前采用了分段锁的设计理念，相当于 Hashtable 与 HashMap 的折中版本，这是效率与一致性权衡后的结果。分段锁是由内部类 Segment 实现的，它继承于
+ReentrantLock ，用来管理它辖区的各个 HashEntry。Segment 通过加锁的方式，保证每个 Segment 内都不发生冲突。
+
+JDK11 版本对 JDK7 版本的ConcurrentHashMap 进行了三点改造：
+1. 取消分段锁机制，进一步降低冲突概率。
+2. 引入红黑树结构。
+3. 使用了更加优化的方式统计集合内的元素数量。首先， Map 原有的 size()
+方法最大只能表示到 `2^31^ - 1`, ConcurrentHashMap 额外提供了 `mappingCount()`用来返回集合内元素的数量，最大可以表示到 `2^63^ - 1`。此外，元素总数更新时，使用了 CAS 多种优化以提高并发能力。
+
+重要字段：
+```Java
+// 默认为null，ConcurrentHashMap 存放数据的地方，扩容时大小总是2的幂次方
+// 初始化发生在第一次插入操作，数组默认初始化大小为 16
+transient volatile Node<K,V>[] table;
+// 默认为null，扩容时新生成的数组，其大小为原数组的两倍
+private transient volatile Node<K,V>[] nextTable;
+// 存储单个KV数据节点。内部有 key、value、hash、next 指向下一个节点
+// 它有4个在 ConcurrentHashMap 类内部定义的子类：
+// TreeBin、TreeNode、ForwardingNode、ReservationNode
+// 前3个子类都重写了查找元素的重要方法 find()
+static class Node<K,V> implements Map.Entry<K,V> { ... }
+
+// 它并不存储实际数据，维护对桶内红黑树的读写锁，存储对红黑树节点的引用
+static final class TreeBin<K,V> extends Node<K,V> { ... }
+// 在红黑树结构中，实际存储数据的节点
+static final class TreeNode<K,V> extends Node<K,V> { ... }
+// 扩容转发节点，放置此节点后，外部对原有哈希槽的操作会转发到 nextTable 上
+static final class ForwardingNode<K,V> extends Node<K,V> { ... }
+// 占位加锁节点。执行某些方法时，对其加锁，如 computeIfAbsent 和 compute
+static final class ReservationNode<K,V> extends Node<K,V> { ... }
+
+// 默认为0，用来控制table的初始化和扩容操作
+// sizeCtl = -1，表示正在初始化中
+// sizeCtl = -n，表示（n-1）个线程正在进行扩容，即-1 -（线程数）
+// sizeCtl > 0，初始化或扩容中需要使用的容量
+// sizeCtl = 0，默认值，使用默认容量进行初始化
+private transient volatile int sizeCtl;
+// 集合size小于64，无论如何，都不会使用红黑树结构
+// 转化为红黑树还有一个条件是 TREEIFY_THRESHOLD
+static final int MIN_TREEIFY_CAPACITY = 64;
+// 同一个哈希桶内存储的元素个数超过此阈值时
+// 存储结构有链表转换为红黑树
+static final int TREEIFY_THRESHOLD = 8;
+// 同一个哈希桶内存储的元素个数小于等于此阈值时
+// 从红黑树回退至链表结构，因为元素个数较少时，链表更快
+static final int UNTREEIFY_THRESHOLD = 6;
+```
+
+![1566996504082](E:\git_repo\Hao_Learn\2019\8\img\1566996504082.png)
+
+在转化过程中，使用同步块锁住当前槽的首元素，防止其他进程对当前槽进行增删改操作，转化完成后利用 CAS 替换原有链表。因为 TreeNode 节点也存储了 next 引用，所以红黑树转链表的操作就变得非常简单，只需从 TreeBin 的 first 元素开始遍历所有的节点，并把节点从 TreeNode 类型转化为 Node 类型即可，当构造好新的链表之后，会同样利用 CAS 替换原有红黑树。相对来说，链表转红黑树更为复杂，流程图如图 6-28 所示。
+
+![1566996696176](C:\Users\18622\AppData\Roaming\Typora\typora-user-images\1566996696176.png)
+
+触发上述存储结构转化最主要的操作是增加元素， 即 put() 方法。基本思想与HashMap 一致，区别就是增加了锁的处理， ConcurrentHashMap 元素插入流程图如图 6-29 所示。
+
+![1566996819187](E:\git_repo\Hao_Learn\2019\8\img\1566996819187.png)
+
+ForwardingNode 在 table 扩容时使用，内部记录了扩容后的 table，即nextTable 。当 table 需要进行扩容时，依次遍历当前 table 中的每一个槽，如果不为 null ，则需要把其中所有的元素根据 hash 值放入扩容后的 nextTable 中， 而原 table 的槽内会放置一个 ForwardingNode 节点。正如其名，此节点会把 find() 请求转发到扩容后的 nextTable 上。而执行 put() 的线程如果碰到此节点，也会协助进行迁移。
+
+ReservationNode 在 computeIfAbsent() 及其相关方法中作为一个预留节点使用。computeIfAbsent() 会先判断相应的 Key 值是否已存在，如果不存在，则调用由用户实现的自定义方法来生成 Value 值， 组成 KV 键值对，随后插入此哈希集合中。在并发场景下，从得知 Key 不存在到插入哈希集合的时间间隔内，为了防止哈希槽被其他线程抢占，当前线程会使用一个 ReservationNode 节点放到槽中并加锁，从而保证了线程的安全性。
+
+正常的写操作，都会想对 hash 桶的第一个节点进行加锁，但是 null 是不能加锁，所以就要new一个占位符出来，放在这个空 hash 桶中成为第一个节点，把占位符当锁的对象，这样就能对整个 hash 桶加锁了。put() /remove() 不使用ReservationNode 是因为它们都特殊处理了下，并且这种特殊情况实际上还更简单，put() 直接使用CAS操作，remove() 直接不操作，都不用加锁。但是computeIfAbsent() 和 compute() 这个两个方法在碰见这种特殊情况时稍微复杂些，代码多一些，不加锁不好处理，所以需要 ReservationNode 来帮助完成对hash桶的加锁操作。
+
+ConcurrentHashMap 在涉及元素总数的相关更新和计算时 ，会最大限度地减少锁的使用 ，以减少线程间的竞争与互相等待。在这个设计思路下， JDK8 的ConcurrentHashMap 对元素总数的计算又做了进一步的优化，具体表现在put()、remove()、size() 中，涉及元素总数的更新和计算，都彻底避免了锁的使用，取而代之的是众多的 CAS 操作。
+
+![1566997697517](C:\Users\18622\AppData\Roaming\Typora\typora-user-images\1566997697517.png)
+
+可以看到在 JDK7 版本中，ConcurrentHashMap 在统计元素总数时已经开始避免使用锁了，毕竟加锁操作会极大地影响到其他线程对于哈希元素的修改。
+
+在 JDK8 的 put() 中，对于哈希元素总数的更新，是置于对某个槽的锁之外的，主要会用到的属性如下：
+
+```Java
+// 记录了元素总数值，主要用在无竞争状态下
+// 在总数更新后，通过 CAS 方式直接更新这个值
+private transient volatile long baseCount;
+// 一个计数器单元．维护了一个 value 值
+@sun.misc.Contended static final class CounterCell { ... }
+// 在竟争激烈的状态下启用，线程会把总数更新情况存放到该结构内
+// 当竞争进一步加剧时，会通过扩容减少竞争
+private transient volatile CounterCell[] counterCells;
+```
+
+正是借助 baseCount 和 counterCells 两个属性，并配合多次使用 CAS 方法，JDK8 中的 ConcurrentHashMap 避免了锁的使用。思路：
+
+- 当并发量较小时，优先使用 CAS 的方式直接更新 baseCount。
+- 当更新 baseCount 冲突，则会认为进入到比较激烈的竞争状态，counterCells 减少竞争，通过 CAS 的方式把总数更新情况记录在 counterCells 对应的位置上。
+- 如果更新 counterCells 上的某个位置时出现了多次失败，则会通过扩容 counterCells 的方式减少冲突。
+- 当 countCells 处在扩容期间时，会尝试更新 baseCount 值。
+
+对于元素总数的统计，逻辑就非常简单了，只需要让 baseCount 加上各 counterCells 内的数据，就可以得出哈希内的元素总数，整个过程完全不需要借助锁。
 
 # 第七章 并发与多线程
 
