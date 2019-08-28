@@ -61,10 +61,341 @@ MapReduce 程序本质上是并行运行的，因此可以将大规模的数据�
 
 MapReduce 任务过程分为两个处理阶段：map 阶段和 reduce 阶段。每阶段都以键值对作为输入和输出，其类型由程序员来选择。程序员还需要写两个函数：map 函数和 reduce 函数。
 
-p47
+#### 使用Hadoop分析数据 - 气象数据集
 
+map函数由 Mapper 类来表示，后者声明一个抽象的 map() 方法。
+```Java
+import java.io.IOException;
 
+import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.Mapper;
 
-![1566899549356](E:\git_repo\Hao_Learn\2019\8\img\1566899549356.png)
+public class MaxTemperatureMapper
+  extends Mapper<LongWritable, Text, Text, IntWritable> {
 
-![1566899515660](E:\git_repo\Hao_Learn\2019\8\img\1566899519101.png)
+  private static final int MISSING = 9999;
+  
+  @Override
+  public void map(LongWritable key, Text value, Context context)
+      throws IOException, InterruptedException {
+    
+    String line = value.toString();
+    String year = line.substring(15, 19);
+    int airTemperature;
+    if (line.charAt(87) == '+') { // parseInt doesn't like leading plus signs
+      airTemperature = Integer.parseInt(line.substring(88, 92));
+    } else {
+      airTemperature = Integer.parseInt(line.substring(87, 92));
+    }
+    String quality = line.substring(92, 93);
+    if (airTemperature != MISSING && quality.matches("[01459]")) {
+      context.write(new Text(year), new IntWritable(airTemperature));
+    }
+  }
+}
+```
+
+Hadoop 本身提供了一套可优化网络序列化传输的基本类型，而不直接使用Java内嵌的类型。这些类型都在 `org.apache.hadoop.io` 包中。LongWritable 相当于Long，Text 相当于String，IntWritable 相当于Integer。
+
+map() 提供了 Context 实例用于输出内容的写入。
+
+reduce 函数由 Reducer 来定义。
+
+```Java
+import java.io.IOException;
+
+import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.Reducer;
+
+public class MaxTemperatureReducer
+  extends Reducer<Text, IntWritable, Text, IntWritable> {
+  
+  @Override
+  public void reduce(Text key, Iterable<IntWritable> values,
+      Context context)
+      throws IOException, InterruptedException {
+    
+    int maxValue = Integer.MIN_VALUE;
+    for (IntWritable value : values) {
+      maxValue = Math.max(maxValue, value.get());
+    }
+    context.write(key, new IntWritable(maxValue));
+  }
+}
+```
+
+运行 MapReduce 作业：
+
+```Java
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+
+public class MaxTemperature {
+
+  public static void main(String[] args) throws Exception {
+    if (args.length != 2) {
+      System.err.println("Usage: MaxTemperature <input path> <output path>");
+      System.exit(-1);
+    }
+
+    /**
+     * 1. 构建 Job 对象
+     * Job 对象指定作业规范。
+     * 我们可以用它来控制整个作业的运行。
+     * 我们在 Hadoop 集群上运行这个作业时，要把代码打包成一个 JAR 文件。
+     * 不必明确指定 JAR 文件的名称，在 Job 对象的 setJarByClass() 方法中传递一个类即可，
+     * Hadoop 利用这个类来查找包含它的 JAR 文件，进而找到相关的 JAR 文件。
+     */
+    Job job = new Job();
+    job.setJarByClass(MaxTemperature.class);
+    job.setJobName("Max temperature");
+
+    /**
+     * 2. 指定输入和输出数据的路径
+     * 输入路径可以是单个的文件、一个目录（将该目录下所有文件当做输入）
+     * 或符合特定文件模式的一系列文件。
+     * 由函数名可知，可多次调用该方法来实现多路径的输入。
+     *
+     * 输出路径只能有一个，是指定输出文件的写入目录。
+     * 在运行作业前，该目录是不应该存在的，否则 Hadoop 会报错并拒绝运行作业。
+     * 这种预防措施的目的是防止数据丢失
+     */
+    FileInputFormat.addInputPath(job, new Path(args[0]));
+    FileOutputFormat.setOutputPath(job, new Path(args[1]));
+
+    /**
+     * 3. 指定要用的 map 类型和 reduce 类型
+     */
+    job.setMapperClass(MaxTemperatureMapper.class);
+    job.setReducerClass(MaxTemperatureReducer.class);
+
+    /**
+     * 4. 控制 reduce 函数的输出类型，并且必须和 Reduce 类产生的相匹配。
+     * map 函数的输出类型默认情况下和 reduce函数是一样的，
+     * 但是如果不同，则必须通过job.setMapOutputKeyClass() 和 job.setMapOutputValueClass()
+     * 来设置 map 函数的输出类型。
+     */
+    job.setOutputKeyClass(Text.class);
+    job.setOutputValueClass(IntWritable.class);
+
+    /**
+     * 5. Job 中的 waitForCompletion() 提交作业并等待执行完成。
+     * 该方法唯一的参数是一个标识，指示是否已生成详细输出。
+     * 当标识为 true（成功）时，作业会把其进度信息写到控制台。
+     * 方法返回一个布尔值，被转换成 System.exit() 的参数 0 或者 1。
+     */
+    System.exit(job.waitForCompletion(true) ? 0 : 1);
+  }
+}
+```
+
+运行测试：
+
+```shell
+# 运行
+hadoop dfs -mkdir -p /root/hadoop
+hadoop dfs -mkdir input
+hadoop dfs -put /opt/bak/1901/1901.txt input
+export HADOOP_CLASSPATH=ch02-mr-intro-4.0.jar
+hadoop MaxTemperature input/1901.txt output
+
+# 输出日志
+19/08/28 15:06:26 WARN mapred.JobClient: Use GenericOptionsParser for parsing the arguments. Applications should implement Tool for the same.
+19/08/28 15:06:26 INFO input.FileInputFormat: Total input paths to process : 1
+19/08/28 15:06:26 INFO util.NativeCodeLoader: Loaded the native-hadoop library
+19/08/28 15:06:26 WARN snappy.LoadSnappy: Snappy native library not loaded
+19/08/28 15:06:27 INFO mapred.JobClient: Running job: job_201908281020_0003
+19/08/28 15:06:28 INFO mapred.JobClient:  map 0% reduce 0%
+19/08/28 15:06:34 INFO mapred.JobClient:  map 100% reduce 0%
+19/08/28 15:06:42 INFO mapred.JobClient:  map 100% reduce 33%
+19/08/28 15:06:44 INFO mapred.JobClient:  map 100% reduce 100%
+19/08/28 15:06:45 INFO mapred.JobClient: Job complete: job_201908281020_0003
+19/08/28 15:06:45 INFO mapred.JobClient: Counters: 29
+19/08/28 15:06:45 INFO mapred.JobClient:   Map-Reduce Framework
+19/08/28 15:06:45 INFO mapred.JobClient:     Spilled Records=13128
+19/08/28 15:06:45 INFO mapred.JobClient:     Map output materialized bytes=72210
+19/08/28 15:06:45 INFO mapred.JobClient:     Reduce input records=6564
+19/08/28 15:06:45 INFO mapred.JobClient:     Virtual memory (bytes) snapshot=3970043904
+19/08/28 15:06:45 INFO mapred.JobClient:     Map input records=6565
+19/08/28 15:06:45 INFO mapred.JobClient:     SPLIT_RAW_BYTES=111
+19/08/28 15:06:45 INFO mapred.JobClient:     Map output bytes=59076
+19/08/28 15:06:45 INFO mapred.JobClient:     Reduce shuffle bytes=72210
+19/08/28 15:06:45 INFO mapred.JobClient:     Physical memory (bytes) snapshot=251985920
+19/08/28 15:06:45 INFO mapred.JobClient:     Reduce input groups=1
+19/08/28 15:06:45 INFO mapred.JobClient:     Combine output records=0
+19/08/28 15:06:45 INFO mapred.JobClient:     Reduce output records=1
+19/08/28 15:06:45 INFO mapred.JobClient:     Map output records=6564
+19/08/28 15:06:45 INFO mapred.JobClient:     Combine input records=0
+19/08/28 15:06:45 INFO mapred.JobClient:     CPU time spent (ms)=1040
+19/08/28 15:06:45 INFO mapred.JobClient:     Total committed heap usage (bytes)=160501760
+19/08/28 15:06:45 INFO mapred.JobClient:   File Input Format Counters 
+19/08/28 15:06:45 INFO mapred.JobClient:     Bytes Read=888190
+19/08/28 15:06:45 INFO mapred.JobClient:   FileSystemCounters
+19/08/28 15:06:45 INFO mapred.JobClient:     HDFS_BYTES_READ=888301
+19/08/28 15:06:45 INFO mapred.JobClient:     FILE_BYTES_WRITTEN=255550
+19/08/28 15:06:45 INFO mapred.JobClient:     FILE_BYTES_READ=72210
+19/08/28 15:06:45 INFO mapred.JobClient:     HDFS_BYTES_WRITTEN=9
+19/08/28 15:06:45 INFO mapred.JobClient:   Job Counters 
+19/08/28 15:06:45 INFO mapred.JobClient:     Launched map tasks=1
+19/08/28 15:06:45 INFO mapred.JobClient:     Launched reduce tasks=1
+19/08/28 15:06:45 INFO mapred.JobClient:     SLOTS_MILLIS_REDUCES=9389
+19/08/28 15:06:45 INFO mapred.JobClient:     Total time spent by all reduces waiting after reserving slots (ms)=0
+19/08/28 15:06:45 INFO mapred.JobClient:     SLOTS_MILLIS_MAPS=6373
+19/08/28 15:06:45 INFO mapred.JobClient:     Total time spent by all maps waiting after reserving slots (ms)=0
+19/08/28 15:06:45 INFO mapred.JobClient:     Data-local map tasks=1
+19/08/28 15:06:45 INFO mapred.JobClient:   File Output Format Counters 
+19/08/28 15:06:45 INFO mapred.JobClient:     Bytes Written=9
+
+# 查看结果
+hadoop fs -cat /user/root/output/part-r-00000
+1901	317
+```
+
+#### 操作 HDFS 的基本命令
+
+1. 打印文件列表（ls）
+
+```shell
+# 标准写法
+    # hdfs: 明确说明是 HDFS 系统路径
+    hadoop fs -ls hdfs:/ 
+
+# 简写
+    # 默认是 HDFS 系统下的根目录
+    hadoop fs -ls / 
+
+#打印指定子目录
+    # HDFS 系统下某个目录
+    hadoop fs -ls /package/test/ 
+```
+
+2. 上传文件、目录（put、copyFromLocal）
+
+```shell
+# put 用法
+
+# 上传新文件
+    # 上传本地 test.txt 文件到 HDFS 根目录，HDFS根目录须无同名文件，否则“File exists”
+    hadoop fs -put file:/root/test.txt hdfs:/ 
+    # 上传并重命名文件。
+    hadoop fs -put test.txt /test2.txt 
+    # 一次上传多个文件到 HDFS 路径。
+    hadoop fs -put test1.txt test2.txt hdfs:/ 
+
+# 上传文件夹
+    # 上传并重命名了文件夹。
+    hadoop fs -put mypkg /newpkg 
+
+# 覆盖上传
+    # 如果 HDFS 目录中有同名文件会被覆盖
+    hadoop fs -put -f /root/test.txt /
+
+# copyFromLocal 用法
+
+# 上传文件并重命名
+hadoop fs -copyFromLocal file:/test.txt hdfs:/test2.txt
+
+# 覆盖上传
+hadoop fs -copyFromLocal -f test.txt /test.txt
+```
+
+3. 下载文件、目录（get、copyToLocal）
+
+```shell
+# get 用法
+
+# 拷贝文件到本地目录
+hadoop fs -get hdfs:/test.txt file:/root/
+
+# 拷贝文件并重命名，可以简写
+hadoop fs -get /test.txt /root/test.txt
+	
+# copyToLocal 用法
+
+# 拷贝文件到本地目录
+hadoop fs -copyToLocal hdfs:/test.txt file:/root/
+# 拷贝文件并重命名，可以简写
+hadoop fs -copyToLocal /test.txt /root/test.txt
+```
+
+4. 拷贝文件、目录（cp）
+
+```shell
+#从本地到 HDFS，同 put
+hadoop fs -cp file:/test.txt hdfs:/test2.txt
+	
+#从 HDFS 到 HDFS
+hadoop fs -cp hdfs:/test.txt hdfs:/test2.txt
+hadoop fs -cp /test.txt /test2.txt
+```
+
+5. 移动文件（mv）
+
+```shell
+hadoop fs -mv hdfs:/test.txt hdfs:/dir/test.txt
+hadoop fs -mv /test.txt /dir/test.txt
+```
+
+6. 删除文件、目录（rm）
+
+```shell
+# 删除指定文件
+hadoop fs -rm /a.txt
+# 删除全部 txt 文件
+hadoop fs -rm /*.txt
+# 递归删除全部文件和目录
+hadoop fs -rm -R /dir/
+```
+
+7. 读取文件（cat、tail）
+
+```shell
+#以字节码的形式读取
+hadoop fs -cat /test.txt 
+hadoop fs -tail /test.txt
+```
+
+8. 创建空文件（touchz）
+
+```shell
+hadoop fs -touchz /newfile.txt
+```
+
+9. 创建文件夹（mkdir）
+
+```shell
+#可以同时创建多个
+hadoop fs -mkdir /newdir /newdir2 
+#同时创建父级目录
+hadoop fs -mkdir -p /newpkg/newpkg2/newpkg3 
+```
+
+10. 获取逻辑空间文件、目录大小（du）
+
+```shell
+#显示 HDFS 根目录中各文件和文件夹大小
+hadoop fs -du / 
+#以最大单位显示 HDFS 根目录中各文件和文件夹大小
+hadoop fs -du -h / 
+#仅显示 HDFS 根目录大小。即各文件和文件夹大小之和
+hadoop fs -du -s / 
+```
+
+#### 横向扩展
+
+MapReduce 作业（job） 是客户端需要执行的一个工作单元，它包括：输入数据、MapReduce 程序和配置信息。Hadoop 将作业分成若干个任务（task）来执行，其中包括两类任务：map 任务和 reduce 任务。这些任务运行在集群的节点上，并通过 TARN 进行调度。如果一个任务失败，它将在另一个不同的节点上自动重新调度运行。
+
+Hadoop 将 MapReduce 的输入数据划分成等长的小数据块，成为输入分片（input split）或简称 “分片”。Hadoop 为每个分片构建一个 map 任务，并由该任务来运行用户自定义的 map 函数从而处理分片中的每条记录。
+
+拥有许多分片，意味着处理每个分片所需要的时间少于处理整个输入数据所花的时间。因此，如果我们并行处理每个分片且每个分片数据比较小，则整个处理过程将获得更好的负载平衡。而且随着分片被切分得更细，负载平衡的质量会更高。
+
+如果分片切分得太小，那么管理分片的总时间 
+
+p54

@@ -6,6 +6,7 @@
 <configuration>
     <property>
         <name>mapred.job.tracker</name>
-        <value>http://172.16.42.3:9001</value>
+        <value>http://localhost:9001</value>
+        <!-- <value>http://172.16.42.3:9001</value> -->
     </property>
 </configuration>
