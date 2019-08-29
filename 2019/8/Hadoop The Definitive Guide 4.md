@@ -431,5 +431,47 @@ combiner 的规则制约着可用的函数类型。
 combiner 函数不能取代 reduce 函数。因为需要 reduce 函数来处理不同 map 输出中具有相同键的记录。但 combiner 函数能帮助减少 mapper 和 reducer 之间的数据传输量。
 
 ```Java
+// cc MaxTemperatureWithCombiner Application to find the maximum temperature, using a combiner function for efficiency
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 
+// vv MaxTemperatureWithCombiner
+public class MaxTemperatureWithCombiner {
+
+  public static void main(String[] args) throws Exception {
+    if (args.length != 2) {
+      System.err.println("Usage: MaxTemperatureWithCombiner <input path> " +
+          "<output path>");
+      System.exit(-1);
+    }
+    
+    Job job = new Job();
+    job.setJarByClass(MaxTemperatureWithCombiner.class);
+    job.setJobName("Max temperature");
+
+    FileInputFormat.addInputPath(job, new Path(args[0]));
+    FileOutputFormat.setOutputPath(job, new Path(args[1]));
+    
+    job.setMapperClass(MaxTemperatureMapper.class);
+    // combiner 需要通过 Reducer 类来设置job.setCombinerClass()
+    job.setCombinerClass(MaxTemperatureReducer.class);
+    job.setReducerClass(MaxTemperatureReducer.class);
+
+    job.setOutputKeyClass(Text.class);
+    job.setOutputValueClass(IntWritable.class);
+    
+    System.exit(job.waitForCompletion(true) ? 0 : 1);
+  }
+}
+// ^^ MaxTemperatureWithCombiner
 ```
+
+这个程序用不着修改便可以在一个完整的数据集上直接运行。这是 MapReduce 的优势：他可以根据数据量的大小和硬件规模进行扩展。
+
+#### Hadoop Streaming
+
+Hadoop 提供了 MapReduce 的 API
