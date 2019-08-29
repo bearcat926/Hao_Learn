@@ -390,6 +390,10 @@ hadoop fs -du -s /
 
 #### 横向扩展
 
+为了实现横向扩展（scaling out），我们需要把数据存储在 DFS 中（典型的为 HDFS），通过使用 YARN ，Hadoop 可以将 MapReduce 计算转移到存储有部分数据的各台机器上。
+
+###### 数据流
+
 MapReduce 作业（job） 是客户端需要执行的一个工作单元，它包括：输入数据、MapReduce 程序和配置信息。Hadoop 将作业分成若干个任务（task）来执行，其中包括两类任务：map 任务和 reduce 任务。这些任务运行在集群的节点上，并通过 TARN 进行调度。如果一个任务失败，它将在另一个不同的节点上自动重新调度运行。
 
 Hadoop 将 MapReduce 的输入数据划分成等长的小数据块，成为输入分片（input split）或简称 “分片”。Hadoop 为每个分片构建一个 map 任务，并由该任务来运行用户自定义的 map 函数从而处理分片中的每条记录。
@@ -402,4 +406,30 @@ Hadoop 将 MapReduce 的输入数据划分成等长的小数据块，成为输�
 
 map 任务将其输出写入本地硬盘，而非 HDFS 的原因是 map 的输出是中间结果，该中间结果由 reduce 任务处理后再产生最终输出结果，而且一旦作业完成，map 的输出结果就可以删除。因此如果把它存储在 HDFS 中并实现备份，难免有些小题大做。如果运行 map 任务的节点在将 map 中间结果传送给 reduce 任务之前失败，Hadoop 将在另一个节点上重新运行这个 map 任务以再次构建中间结果。
 
-p56
+reduce 任务并不具备数据本地化的优势，单个 reduce 任务的输入通常来自于所有 mapper 的输出。
+
+将 reduce 的输出写入 HDFS 确实需要占用网络带宽，但这于正常的 HDFS写入的消耗一样。
+
+![1567059546301](E:\git_repo\Hao_Learn\2019\8\img\1567059546301.png)
+
+reduce 任务的数量并非由输入数据的大小决定，相反是独立指定的。如果有好多个 reduce 任务，每个 map 任务就会针对输出进行分区（partition），即为每个 reduce 任务建一个分区。每个分区有许多键（及其对应的值），但每个键对应的 KV 对记录都在同一分区中。分区可由用户定义的分区函数控制，但通常用默认的 partitioner 通过哈希函数来分区，很高效。
+
+map 任务和 reduce 任务之间的数据流成为 shuffle（混洗），因为每个 reduce 任务的输入都来自许多 map 任务。shuffle 一般比图中所示的更复杂，而且调整混洗参数对作业总执行时间的影响非常大。
+
+![1567059949789](E:\git_repo\Hao_Learn\2019\8\img\1567059949789.png)
+
+最后，当数据处理可以完全并行（即无需混洗时），可能会出现无 reduce 任务的情况。在这种情况下，唯一的非本地节点数据传输是 map 任务将结果写入 HDFS。
+
+![1567060120155](E:\git_repo\Hao_Learn\2019\8\img\1567060120155.png)
+
+###### combiner 函数
+
+集群上的可用带宽限制了 MapReduce 作业的数量，因此尽量避免 map 和 reduce 任务之间的数据传输是有利的。Hadoop 允许用户针对 map 任务的输出指定一个 combiner，其输出作为 reduce 函数的输入。由于 combiner 属于优化方案，所以 Hadoop 无法确定要对一个指定的 map 任务输出记录调用多少次 combiner ，但是不管调用 combiner 多少次，reducer 的输出结果都是一样的。
+
+combiner 的规则制约着可用的函数类型。
+
+combiner 函数不能取代 reduce 函数。因为需要 reduce 函数来处理不同 map 输出中具有相同键的记录。但 combiner 函数能帮助减少 mapper 和 reducer 之间的数据传输量。
+
+```Java
+
+```
