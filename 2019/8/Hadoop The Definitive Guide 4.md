@@ -258,7 +258,253 @@ hadoop fs -cat /user/root/output/part-r-00000
 1901	317
 ```
 
-#### 操作 HDFS 的基本命令
+#### 横向扩展
+
+为了实现横向扩展（scaling out），我们需要把数据存储在 DFS 中（典型的为 HDFS），通过使用 YARN ，Hadoop 可以将 MapReduce 计算转移到存储有部分数据的各台机器上。
+
+###### 数据流
+
+MapReduce 作业（job） 是客户端需要执行的一个工作单元，它包括：输入数据、MapReduce 程序和配置信息。Hadoop 将作业分成若干个任务（task）来执行，其中包括两类任务：map 任务和 reduce 任务。这些任务运行在集群的节点上，并通过 TARN 进行调度。如果一个任务失败，它将在另一个不同的节点上自动重新调度运行。
+
+Hadoop 将 MapReduce 的输入数据划分成等长的小数据块，成为输入分片（input split）或简称 “分片”。Hadoop 为每个分片构建一个 map 任务，并由该任务来运行用户自定义的 map 函数从而处理分片中的每条记录。
+
+拥有许多分片，意味着处理每个分片所需要的时间少于处理整个输入数据所花的时间。因此，如果我们并行处理每个分片且每个分片数据比较小，则整个处理过程将获得更好的负载平衡。而且随着分片被切分得更细，负载平衡的质量会更高。
+
+如果分片切分得太小，那么管理分片的总时间和构建 map 任务的总时间将决定作业的整个执行时间。对大多数作业来说，一个合理的分片大小趋向于 HDFS 的一个块的大小，默认是 128 MB，不过可以针对集群调整这个默认值，或在每个文件创建时指定。大小相同的原因：他是确保可以存储在单个节点上的最大输入块的大小。如果分片跨越两个数据块，那么对于任何一个 HDFS 节点，基本上都不可能通常是存储这个两个数据块，因此分片中的部分数据需要通过网络传输到 map 任务运行的节点。与使用本地数据运行整个 map 任务相比，这种方法显然效率更低。Hadoop 在存储有输入数据（HDFS 中的数据）的节点上运行 map 任务可以获得最佳性能，因为无需使用宝贵的集群宽带资源，即“数据本地化优化”（data locality optimization）。
+
+![1566998638099](E:\git_repo\Hao_Learn\2019\8\img\1566998638099.png)
+
+map 任务将其输出写入本地硬盘，而非 HDFS 的原因是 map 的输出是中间结果，该中间结果由 reduce 任务处理后再产生最终输出结果，而且一旦作业完成，map 的输出结果就可以删除。因此如果把它存储在 HDFS 中并实现备份，难免有些小题大做。如果运行 map 任务的节点在将 map 中间结果传送给 reduce 任务之前失败，Hadoop 将在另一个节点上重新运行这个 map 任务以再次构建中间结果。
+
+reduce 任务并不具备数据本地化的优势，单个 reduce 任务的输入通常来自于所有 mapper 的输出。
+
+将 reduce 的输出写入 HDFS 确实需要占用网络带宽，但这于正常的 HDFS写入的消耗一样。
+
+![1567059546301](E:\git_repo\Hao_Learn\2019\8\img\1567059546301.png)
+
+reduce 任务的数量并非由输入数据的大小决定，相反是独立指定的。如果有好多个 reduce 任务，每个 map 任务就会针对输出进行分区（partition），即为每个 reduce 任务建一个分区。每个分区有许多键（及其对应的值），但每个键对应的 KV 对记录都在同一分区中。分区可由用户定义的分区函数控制，但通常用默认的 partitioner 通过哈希函数来分区，很高效。
+
+map 任务和 reduce 任务之间的数据流成为 shuffle（混洗），因为每个 reduce 任务的输入都来自许多 map 任务。shuffle 一般比图中所示的更复杂，而且调整混洗参数对作业总执行时间的影响非常大。
+
+![1567059949789](E:\git_repo\Hao_Learn\2019\8\img\1567059949789.png)
+
+最后，当数据处理可以完全并行（即无需混洗时），可能会出现无 reduce 任务的情况。在这种情况下，唯一的非本地节点数据传输是 map 任务将结果写入 HDFS。
+
+![1567060120155](E:\git_repo\Hao_Learn\2019\8\img\1567060120155.png)
+
+###### combiner 函数
+
+集群上的可用带宽限制了 MapReduce 作业的数量，因此尽量避免 map 和 reduce 任务之间的数据传输是有利的。Hadoop 允许用户针对 map 任务的输出指定一个 combiner，其输出作为 reduce 函数的输入。由于 combiner 属于优化方案，所以 Hadoop 无法确定要对一个指定的 map 任务输出记录调用多少次 combiner ，但是不管调用 combiner 多少次，reducer 的输出结果都是一样的。
+
+combiner 的规则制约着可用的函数类型。
+
+combiner 函数不能取代 reduce 函数。因为需要 reduce 函数来处理不同 map 输出中具有相同键的记录。但 combiner 函数能帮助减少 mapper 和 reducer 之间的数据传输量。
+
+```Java
+// cc MaxTemperatureWithCombiner Application to find the maximum temperature, using a combiner function for efficiency
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+
+// vv MaxTemperatureWithCombiner
+public class MaxTemperatureWithCombiner {
+
+  public static void main(String[] args) throws Exception {
+    if (args.length != 2) {
+      System.err.println("Usage: MaxTemperatureWithCombiner <input path> " +
+          "<output path>");
+      System.exit(-1);
+    }
+    
+    Job job = new Job();
+    job.setJarByClass(MaxTemperatureWithCombiner.class);
+    job.setJobName("Max temperature");
+
+    FileInputFormat.addInputPath(job, new Path(args[0]));
+    FileOutputFormat.setOutputPath(job, new Path(args[1]));
+    
+    job.setMapperClass(MaxTemperatureMapper.class);
+    // combiner 需要通过 Reducer 类来设置job.setCombinerClass()
+    job.setCombinerClass(MaxTemperatureReducer.class);
+    job.setReducerClass(MaxTemperatureReducer.class);
+
+    job.setOutputKeyClass(Text.class);
+    job.setOutputValueClass(IntWritable.class);
+    
+    System.exit(job.waitForCompletion(true) ? 0 : 1);
+  }
+}
+// ^^ MaxTemperatureWithCombiner
+```
+
+这个程序用不着修改便可以在一个完整的数据集上直接运行。这是 MapReduce 的优势：他可以根据数据量的大小和硬件规模进行扩展。
+
+#### Hadoop Streaming
+
+Hadoop Streaming 使用 Unix 标准流作为 Hadoop 和应用程序之间的接口，所以可以使用任何编程语言通过标准输入/输出来写 MapReduce 程序。
+
+Streaming 天生适合用于文本处理。map 的输入数据通过标准输入流传递给 map 函数，并且是一行一行地传输，最后将结果行写到标准输出。map 输出的 KV 对是一个以制表符分割的行，reduce 函数的输入格式与之相同并通过标准输入流进行传输。reduce 函数从标准输入流中读取输入行，该输入已由 Hadoop 框架根据键排过序，最后将结果写入标准输出。
+
+Streaming 和 Java MapReduce API 之间的设计差异：
+Java API 控制的 map 函数一次只处理一条记录。针对输入数据中的每一条记录，该框架均需调用 Mapper 的 map() 方法来处理。然而在 Streaming 中，map 程序可以自己决定如何处理输入数据。
+
+旧版 Java MapReduce API 使用“推”记录方式，新版中使用“拉”的方式来处理。
+
+![1567064461868](C:\Users\HAOHAOA\AppData\Roaming\Typora\typora-user-images\1567064461868.png)
+
+## 第3章 HDFS
+
+管理网络中跨多台计算机存储的文件系统成为分布式文件系统（Distributed File System）。该系统架构于网络之上，势必会引入网络编程的复杂性，因此分布式文件系统比普通磁盘文件系统更为复杂。
+
+HDFS 是 Hadoop 的旗舰级文件系统，但实际上 Hadoop 是一个综合性的文件系统抽象。
+
+#### HDFS 的设计
+
+HDFS 以**流式数据访问**（一次写入、多次读取）模式来存储**超大文件**（指具有几百 MB、几百 GB、甚至几百 TB 大小的文件），运行于商用硬件（即普通硬件）集群上。
+
+对于**商用硬件**组成的庞大集群来说，节点故障的几率还是非常高的，但 HDFS 被设计成能够继续运行且不让用户察觉到明显的中断。
+
+HDFS 是为高数据吞吐量应用优化的，这可能会以提高时间延迟为代价，因此**不适合低时间延迟数据访问应用**。
+
+由于 namenode 将文件系统的元数据存储在内存中，因此该文件系统所能存储的文件总数受限于 namenode 的内存容量。根据经验，每个文件、目录和数据块的存储信息大约占 150 字节。因此对于 HDFS **不适用于存储大量的小文件**。
+
+HDFS 中的文件写入只支持单个写入者，而且写操作总是以“只添加”方式在文件末尾写数据。**不支持多个写入者操作，也不支持在文件的任意位置进行修改**。
+
+#### HDFS 的概念
+
+1. 数据块
+
+磁盘块是磁盘进行数据读/写的最小单位，一般为 512B。
+
+构建于单个磁盘之上的文件系统通过磁盘块来管理该文件系统中的块，该文件系统块的大小可以是磁盘块的整数倍，一般为几千字节。
+
+HDFS 的块(block)，默认为 128MB，为什么这么大？目的是为了最小化寻址开销。如果块足够大，从磁盘传输数据的时间会明显大于这个块开始位置所需的时间，即传输一个由多个块组成的大文件的时间取决于磁盘传输速率。
+
+很多情况下 HDFS 安装时使用更大的块，但是这个参数也不会设置的过大。map 任务通常一次只处理一个块中的数据，因此如果任务数少于集群中节点的数量，作业的运行速度就会比较慢。
+
+HDFS 上的文件也被划分为块大小的多个分块（chunk），作为独立的存储单元。
+
+对块进行抽象而带来的好处：
+
+- 一个文件的大小可以大于网络中任意一个磁盘的容量。
+- 使用抽象块而非整个文件作为存储单元，大大简化了存储子系统的设计。将存储子系统的处理对象设置为块，可简化存储管理，同时也消除了对文件元数据的顾虑，并不需要与块一同存储，其他系统可以单独管理这些元数据。
+- 适合数据备份，进而提供数据容错能力和提高可用性。
+
+与磁盘文件系统相似，HDFS 中 `hadoop fsck`指令可以显示块信息。
+
+```shell
+hadoop fsck / -files -blocks
+
+FSCK started by root from /172.16.42.3 for path / at Thu Aug 29 16:22:09 CST 2019
+/ <dir>
+/opt <dir>
+/opt/hadoop-1.2.1 <dir>
+/opt/hadoop-1.2.1/tmp <dir>
+/opt/hadoop-1.2.1/tmp/mapred <dir>
+/opt/hadoop-1.2.1/tmp/mapred/staging <dir>
+/opt/hadoop-1.2.1/tmp/mapred/staging/root <dir>
+/opt/hadoop-1.2.1/tmp/mapred/staging/root/.staging <dir>
+/opt/hadoop-1.2.1/tmp/mapred/staging/root/.staging/job_201908281020_0001 <dir>
+/opt/hadoop-1.2.1/tmp/mapred/staging/root/.staging/job_201908281020_0001/job.jar 13115 bytes, 1 block(s):  Under replicated blk_-6130025783369441984_1002. Target Replicas is 10 but found 1 replica(s).
+0. blk_-6130025783369441984_1002 len=13115 repl=1
+
+/opt/hadoop-1.2.1/tmp/mapred/staging/root/.staging/job_201908281020_0002 <dir>
+/opt/hadoop-1.2.1/tmp/mapred/staging/root/.staging/job_201908281020_0002/job.jar 13115 bytes, 1 block(s):  Under replicated blk_-14591262224782312_1003. Target Replicas is 10 but found 1 replica(s).
+0. blk_-14591262224782312_1003 len=13115 repl=1
+
+/opt/hadoop-1.2.1/tmp/mapred/system <dir>
+/opt/hadoop-1.2.1/tmp/mapred/system/jobtracker.info 4 bytes, 1 block(s):  OK
+0. blk_-3753673992170444692_1015 len=4 repl=1
+
+/root <dir>
+/root/hadoop <dir>
+/user <dir>
+/user/root <dir>
+/user/root/-p <dir>
+/user/root/input <dir>
+/user/root/input/1901.txt 888190 bytes, 1 block(s):  OK
+0. blk_-6913416553042151769_1004 len=888190 repl=1
+
+/user/root/output <dir>
+/user/root/output/_SUCCESS 0 bytes, 0 block(s):  OK
+
+/user/root/output/_logs <dir>
+/user/root/output/_logs/history <dir>
+/user/root/output/_logs/history/job_201908281020_0003_1566975986978_root_Max+temperature 13887 bytes, 1 block(s):  OK
+0. blk_-6416820537601840496_1014 len=13887 repl=1
+
+/user/root/output/_logs/history/job_201908281020_0003_conf.xml 48513 bytes, 1 block(s):  OK
+0. blk_9117670473230446324_1012 len=48513 repl=1
+
+/user/root/output/part-r-00000 9 bytes, 1 block(s):  OK
+0. blk_396238703654203438_1013 len=9 repl=1
+
+Status: HEALTHY
+ Total size:	976833 B
+ Total dirs:	20
+ Total files:	8
+ Total blocks (validated):	7 (avg. block size 139547 B)
+ Minimally replicated blocks:	7 (100.0 %)
+ Over-replicated blocks:	0 (0.0 %)
+ Under-replicated blocks:	2 (28.571428 %)
+ Mis-replicated blocks:		0 (0.0 %)
+ Default replication factor:	1
+ Average block replication:	1.0
+ Corrupt blocks:		0
+ Missing replicas:		18 (257.14285 %)
+ Number of data-nodes:		1
+ Number of racks:		1
+FSCK ended at Thu Aug 29 16:22:09 CST 2019 in 3 milliseconds
+
+
+The filesystem under path '/' is HEALTHY
+```
+
+2. namenode 和 datanode
+
+HDFS 集群有两类节点以管理节点-工作节点模式运行，即一个 namenode（管理节点）和多个 datanode（工作节点）。namenode 管理文件系统的命名空间。它维护着文件系统树及整棵树内所有的文件和目录。这些信息以两个文件形式永久保存在本地磁盘上：命名空间镜像文件和编辑日志文件。namenode 也记录着每个文件中各个块所在的数据节点信息，但它并不永久保存块的位置信息，因为这些信息会在系统启动时根据数据节点信息重建。
+
+客户端（client）代表用户通过与 namenode 和 datanode 交互来访问整个文件系统。客户端提供一个类似于 POSIX（可移植操作系统界面）的文件系统接口，使用户在编程时无需知道 namenode 和 datanode 也可以实现其功能。
+
+datanode 使文件系统的工作节点。他们根据需要存储并检索数据库（受客户端或 namenode 调度），并且定期向 namenode 发送它们所存储的块的列表。
+
+如果运行 namenode 服务的机器损坏，文件系统上所有的文件将会丢失，文件系统将无法使用，因为不知道如何根据 datanode 的块重建文件。为了实现 namenode 的容错性，Hadoop提供了两种机制：
+
+- 备份那些组成文件系统元数据持久状态的文件。Hadoop 可以通过配置使 namenode 在多个文件系统上保存元数据的持久状态。这些写操作是实时同步的，且为原子操作。一般的配置是，将持久状态写入本地磁盘的同时，写入一个远程挂载的网络文件系统（NFS）。
+- 运行一个辅助 namenode，但它不能被用作 namenode。这个辅助 namenode 的重要作用是定期合并并保存编辑日志与命名空间镜像，以防止编辑日志过大，并且会在 namenode 发生故障时启用。但由于辅助 namenode 保存的状态总是滞后于主节点，所以难免会丢失部分数据。在这种情况下，一般把存储在 NFS 上的 namenode 元数据复制到辅助 namenode 并作为新的主 namenode 运行。 辅助 namenode 一般在另一台单独的物理计算机上运行，因为需要占用大量 CPU 时间，并且需要与 namenode 一样多的内存来执行合并操作。
+
+3. 块缓存
+
+通常 datanode 从磁盘中读取块，但对于访问频繁的文件，其对应的块可能被显式地缓存在datanode 的内存中，以堆外块缓存（off-heap block cache）的形式存在。默认情况下，一个块仅缓存在一个 datanode 的内存中。作业调度器（用于 MapReduce、Spark 和其他框架的）通过在缓存块的 datanode 上运行任务，可以利用块缓存的优势提高读操作的性能。
+
+用户或应用通过在缓存池（cache pool）中增加一个 cache directive 来告诉 namenode 需要缓存哪些文件及存多久。缓存池是一个用于管理缓存权限和资源使用的管理性分组。
+
+4. HDFS 的高可用性
+
+namenode 是唯一存储元数据与文件到数据块映射的地方。
+
+namenode 依旧存在单点失效（SPOF，single point of failure）。
+
+想要从一个失效的 namenode 恢复，新的 namenode 直到满足以下情形才能响应服务：
+
+- 将命名空间的映像导入内存中
+- 重演编辑日志
+- 接受到足够多的来自 datanode 的数据块报告并退出安全模式
+
+对于一个大型并拥有大量文件和数据块的集群，namenode 的冷启动需要 30 分钟，甚至更长时间，进而影响到日常维护。
+
+事实上，预期外的 namenode 失效出现的概率很低，所以在现实中，计划内的系统失效时间实际更为重要。
+
+Hadoop2 针对上述问题增加了对 HDFS 高可用性（HA）的支持。在这一实现中，配置了一对活动-备用（active - standby） namenode。当活动 namenode 失效，备用 namenode 就会接管它的任务并开始服务于来自客户端的请求，不会有任何明显中断。
+
+实现这一目标需要在架构上做如下修改：
+
+- p71
+
+#### 命令行接口 - 操作 HDFS 的基本命令
 
 1. 打印文件列表（ls）
 
@@ -387,91 +633,3 @@ hadoop fs -du -h /
 #仅显示 HDFS 根目录大小。即各文件和文件夹大小之和
 hadoop fs -du -s / 
 ```
-
-#### 横向扩展
-
-为了实现横向扩展（scaling out），我们需要把数据存储在 DFS 中（典型的为 HDFS），通过使用 YARN ，Hadoop 可以将 MapReduce 计算转移到存储有部分数据的各台机器上。
-
-###### 数据流
-
-MapReduce 作业（job） 是客户端需要执行的一个工作单元，它包括：输入数据、MapReduce 程序和配置信息。Hadoop 将作业分成若干个任务（task）来执行，其中包括两类任务：map 任务和 reduce 任务。这些任务运行在集群的节点上，并通过 TARN 进行调度。如果一个任务失败，它将在另一个不同的节点上自动重新调度运行。
-
-Hadoop 将 MapReduce 的输入数据划分成等长的小数据块，成为输入分片（input split）或简称 “分片”。Hadoop 为每个分片构建一个 map 任务，并由该任务来运行用户自定义的 map 函数从而处理分片中的每条记录。
-
-拥有许多分片，意味着处理每个分片所需要的时间少于处理整个输入数据所花的时间。因此，如果我们并行处理每个分片且每个分片数据比较小，则整个处理过程将获得更好的负载平衡。而且随着分片被切分得更细，负载平衡的质量会更高。
-
-如果分片切分得太小，那么管理分片的总时间和构建 map 任务的总时间将决定作业的整个执行时间。对大多数作业来说，一个合理的分片大小趋向于 HDFS 的一个块的大小，默认是 128 MB，不过可以针对集群调整这个默认值，或在每个文件创建时指定。大小相同的原因：他是确保可以存储在单个节点上的最大输入块的大小。如果分片跨越两个数据块，那么对于任何一个 HDFS 节点，基本上都不可能通常是存储这个两个数据块，因此分片中的部分数据需要通过网络传输到 map 任务运行的节点。与使用本地数据运行整个 map 任务相比，这种方法显然效率更低。Hadoop 在存储有输入数据（HDFS 中的数据）的节点上运行 map 任务可以获得最佳性能，因为无需使用宝贵的集群宽带资源，即“数据本地化优化”（data locality optimization）。
-
-![1566998638099](E:\git_repo\Hao_Learn\2019\8\img\1566998638099.png)
-
-map 任务将其输出写入本地硬盘，而非 HDFS 的原因是 map 的输出是中间结果，该中间结果由 reduce 任务处理后再产生最终输出结果，而且一旦作业完成，map 的输出结果就可以删除。因此如果把它存储在 HDFS 中并实现备份，难免有些小题大做。如果运行 map 任务的节点在将 map 中间结果传送给 reduce 任务之前失败，Hadoop 将在另一个节点上重新运行这个 map 任务以再次构建中间结果。
-
-reduce 任务并不具备数据本地化的优势，单个 reduce 任务的输入通常来自于所有 mapper 的输出。
-
-将 reduce 的输出写入 HDFS 确实需要占用网络带宽，但这于正常的 HDFS写入的消耗一样。
-
-![1567059546301](E:\git_repo\Hao_Learn\2019\8\img\1567059546301.png)
-
-reduce 任务的数量并非由输入数据的大小决定，相反是独立指定的。如果有好多个 reduce 任务，每个 map 任务就会针对输出进行分区（partition），即为每个 reduce 任务建一个分区。每个分区有许多键（及其对应的值），但每个键对应的 KV 对记录都在同一分区中。分区可由用户定义的分区函数控制，但通常用默认的 partitioner 通过哈希函数来分区，很高效。
-
-map 任务和 reduce 任务之间的数据流成为 shuffle（混洗），因为每个 reduce 任务的输入都来自许多 map 任务。shuffle 一般比图中所示的更复杂，而且调整混洗参数对作业总执行时间的影响非常大。
-
-![1567059949789](E:\git_repo\Hao_Learn\2019\8\img\1567059949789.png)
-
-最后，当数据处理可以完全并行（即无需混洗时），可能会出现无 reduce 任务的情况。在这种情况下，唯一的非本地节点数据传输是 map 任务将结果写入 HDFS。
-
-![1567060120155](E:\git_repo\Hao_Learn\2019\8\img\1567060120155.png)
-
-###### combiner 函数
-
-集群上的可用带宽限制了 MapReduce 作业的数量，因此尽量避免 map 和 reduce 任务之间的数据传输是有利的。Hadoop 允许用户针对 map 任务的输出指定一个 combiner，其输出作为 reduce 函数的输入。由于 combiner 属于优化方案，所以 Hadoop 无法确定要对一个指定的 map 任务输出记录调用多少次 combiner ，但是不管调用 combiner 多少次，reducer 的输出结果都是一样的。
-
-combiner 的规则制约着可用的函数类型。
-
-combiner 函数不能取代 reduce 函数。因为需要 reduce 函数来处理不同 map 输出中具有相同键的记录。但 combiner 函数能帮助减少 mapper 和 reducer 之间的数据传输量。
-
-```Java
-// cc MaxTemperatureWithCombiner Application to find the maximum temperature, using a combiner function for efficiency
-import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.IntWritable;
-import org.apache.hadoop.io.Text;
-import org.apache.hadoop.mapreduce.Job;
-import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
-import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
-
-// vv MaxTemperatureWithCombiner
-public class MaxTemperatureWithCombiner {
-
-  public static void main(String[] args) throws Exception {
-    if (args.length != 2) {
-      System.err.println("Usage: MaxTemperatureWithCombiner <input path> " +
-          "<output path>");
-      System.exit(-1);
-    }
-    
-    Job job = new Job();
-    job.setJarByClass(MaxTemperatureWithCombiner.class);
-    job.setJobName("Max temperature");
-
-    FileInputFormat.addInputPath(job, new Path(args[0]));
-    FileOutputFormat.setOutputPath(job, new Path(args[1]));
-    
-    job.setMapperClass(MaxTemperatureMapper.class);
-    // combiner 需要通过 Reducer 类来设置job.setCombinerClass()
-    job.setCombinerClass(MaxTemperatureReducer.class);
-    job.setReducerClass(MaxTemperatureReducer.class);
-
-    job.setOutputKeyClass(Text.class);
-    job.setOutputValueClass(IntWritable.class);
-    
-    System.exit(job.waitForCompletion(true) ? 0 : 1);
-  }
-}
-// ^^ MaxTemperatureWithCombiner
-```
-
-这个程序用不着修改便可以在一个完整的数据集上直接运行。这是 MapReduce 的优势：他可以根据数据量的大小和硬件规模进行扩展。
-
-#### Hadoop Streaming
-
-Hadoop 提供了 MapReduce 的 API
