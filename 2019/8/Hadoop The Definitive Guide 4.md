@@ -633,3 +633,4 @@ hadoop fs -du -h /
 #仅显示 HDFS 根目录大小。即各文件和文件夹大小之和
 hadoop fs -du -s / 
 ```
+
