@@ -353,7 +353,7 @@ Java API 控制的 map 函数一次只处理一条记录。针对输入数据中
 
 旧版 Java MapReduce API 使用“推”记录方式，新版中使用“拉”的方式来处理。
 
-![1567064461868](C:\Users\HAOHAOA\AppData\Roaming\Typora\typora-user-images\1567064461868.png)
+![1567064461868](E:\git_repo\Hao_Learn\2019\8\img\1567064461868.png)
 
 ## 第3章 HDFS
 
@@ -502,7 +502,28 @@ Hadoop2 针对上述问题增加了对 HDFS 高可用性（HA）的支持。在�
 
 实现这一目标需要在架构上做如下修改：
 
-- p71
+- namenode 之间需要通过高可用共享存储实现编辑日志的共享。
+- datanode 需要同时向两个 namenode 发送数据块处理报告，因为数据块的映射信息存储在 nodename 的内存中。
+- 客户端需要使用特定的机制来处理 namenode 的失效问题，这一机制对用户是透明的。
+- 辅助 namenode 的角色被备用 namenode 所包含，备用 namenode 为活动的 namenode 命名空间设置周期性检查点。
+
+两种高可用性共享存储：NFS 过滤器或群体日志管理器（QJM，quorum journal manager）。
+
+QJM 是一个专用的 HDFS 实现，为提供一个高可用的编辑日志而设计。它以一组日志节点（journalnode）的形式运行，每一次编辑必须写入多数日志节点。QJM一般有三个 journalnode，所以系统可以能够忍受任何一个丢失。
+
+在活动 namenode 失效之后，备用 namenode 能够快速（几十秒左右）实现任务接管，因为最新的状态存储在内存中：包括最新的编辑日志条目和数据块映射信息。实际观察到的失效时间略长一点（1 分钟左右），因为系统需要保守确定活动 namenode 是否真的失效了。
+
+活动 namenode 和备用 namenode 都失效的情况发生的概率非常低，管理员依旧可以声明一个备用 namenode 并实现冷启动。
+
+系统中有一个称为故障转移控制器（failover controller）的新实体，管理着将活动 namenode 转移为备用 namenode 的转换过程。有多种故障转移控制器，默认的是使用了 ZooKeeper 来确保有且仅有一个活动 namenode 。每一个 namenode 运行着一个轻量级的故障转移控制器，其工作就是监视宿主 namenode 是否失效（通过一个简单的心跳机制实现），并在namenode 失效时进行故障切换。
+
+管理员也可以手动发起故障切换，例如在进行日常维护时，这称为“平稳的故障转移”。
+
+同一时间 QJM 仅允许一个 namenode 向编辑日志中写入数据。然而，对于先前的活动 namenode 而言，仍有可能响应并处理客户过时的读请求，所以需要设置一个 SSH 规避命令用于杀死 namenode 的进程。而 NFS 过滤器由于不可能同一时间只允许一个 namenode 写入数据，因此需要更有力的规避方法。
+
+规避机制包括：撤销 namenode 访问共享存储目录的权限（通常使用供应商指定的NFS命令）、通过远程管理命令屏蔽相应的网络接口。最后手段是通过一个特定的供电单元对相应主机进行断电操作。
+
+客户端的故障转移通过客户端类库实现透明处理。最简单的实现是通过客户端的配置文件实现故障转移的控制。HDFS URI 使用一个逻辑主机名，该主机名映射到一对 namenode 地址，客户端类库会访问每一个 namenode 地址直至处理完成。
 
 #### 命令行接口 - 操作 HDFS 的基本命令
 
@@ -634,3 +655,271 @@ hadoop fs -du -h /
 hadoop fs -du -s / 
 ```
 
+#### Hadoop 文件系统
+
+Hadoop 有一个抽象的文件系统概念，HDFS 只是其中的一个实现。Java 抽象类 `org.apache.hadoop.fs.FileSystem`定义了 Hadoop 中一个文件系统的客户端接口，并且该抽象类有几个具体实现：
+
+![1567135657608](E:\git_repo\Hao_Learn\2019\8\img\1567135657608.png)
+
+#### Java 接口
+
+Hadoop 的 Filesystem 类是与 Hadoop 的某一文件系统进行交互的 API。通过集成 FileSystem 抽象类，并编写代码，可以使其在不同文件系统中可移植。
+
+1. 从 Hadoop URL 读取数据
+
+要从 Hadoop 文件系统读取文件，最简单的方法是使用 java.net.URL 对象打开数据流，从中读取数据。
+
+范例 3-1：
+
+```Java
+// cc URLCat Displays files from a Hadoop filesystem on standard output using a URLStreamHandler
+import java.io.InputStream;
+import java.net.URL;
+
+import org.apache.hadoop.fs.FsUrlStreamHandlerFactory;
+import org.apache.hadoop.io.IOUtils;
+
+// vv URLCat
+public class URLCat {
+
+  static {
+    /**
+     * 通过FsUrlStreamHandlerFactory实例调用 
+     * java.net.URL对象的setURLStreamHandlerFactory()方法
+     * JVM只能调用一次这个方法，因此通常在静态方法中调用。
+     * 这个限制意味着如果程序的其他组件声明了一个UrlStreamHandlerFactory实例，
+     * 则将无法再次使用这种方法从Hadoop中读取数据。
+     */
+    URL.setURLStreamHandlerFactory(new FsUrlStreamHandlerFactory());
+  }
+  
+  public static void main(String[] args) throws Exception {
+    InputStream in = null;
+    try {
+      in = new URL(args[0]).openStream();
+      /**
+       * 调用Hadoop中简洁的IOUtils类，并在finally字句中关闭数据流，
+       * 同时也可以在输入/输出流之间复制数据。copyBytes的最后两个参数，
+       * 第一个设置用于复制的缓冲区大小，第二个设置复制结束后是否关闭数据流。
+       */
+      IOUtils.copyBytes(in, System.out, 4096, false);
+    } finally {
+      IOUtils.closeStream(in);
+    }
+  }
+}
+// ^^ URLCat
+```
+
+运行测试：
+
+```shell
+export HADOOP_CLASSPATH=ch03-hdfs-4.0.jar
+# 在core-site.xml中可以设置 namenode 端口
+#<property>
+#    <name>fs.default.name</name>
+#    <value>hdfs://localhost:9000</value>
+#</property>
+hadoop URLCat hdfs://localhost:9000/user/root/input/1901.tx
+```
+
+2. 通过 FileSystem API 读取数据
+
+Hadoop 文件系统中通过 Hadoop Path 对象（而非 java.io.File 对象，因为它的语义与本地文件系统联系太紧密）来代表文件。可以将路径视为一个 Hadoop 文件系统URI。
+
+FileSystem 是一个通用的文件系统 API，所以第一步是检索我们需要使用的文件系统实例。获取 FileSystem 实例有下面这几个静态工程方法：
+
+```Java
+public static FileSystem get(Configuration conf) throws IOException {
+    return get(getDefaultUri(conf), conf);
+}
+
+public static FileSystem get(URI uri, Configuration conf) throws IOException {
+    String scheme = uri.getScheme();
+    String authority = uri.getAuthority();
+
+    if (scheme == null && authority == null) {     // use default FS
+      return get(conf);
+    }
+
+    if (scheme != null && authority == null) {     // no authority
+      URI defaultUri = getDefaultUri(conf);
+      if (scheme.equals(defaultUri.getScheme())    // if scheme matches default
+          && defaultUri.getAuthority() != null) {  // & default has authority
+        return get(defaultUri, conf);              // return default
+      }
+    }
+    
+    String disableCacheName = String.format("fs.%s.impl.disable.cache", scheme);
+    if (conf.getBoolean(disableCacheName, false)) {
+      return createFileSystem(uri, conf);
+    }
+
+    return CACHE.get(uri, conf);
+  }
+
+public static FileSystem get(final URI uri, final Configuration conf,
+        final String user) throws IOException, InterruptedException {
+    String ticketCachePath =
+      conf.get(CommonConfigurationKeys.KERBEROS_TICKET_CACHE_PATH);
+    UserGroupInformation ugi =
+        UserGroupInformation.getBestUGI(ticketCachePath, user);
+    return ugi.doAs(new PrivilegedExceptionAction<FileSystem>() {
+      @Override
+      public FileSystem run() throws IOException {
+        return get(uri, conf);
+      }
+    });
+  }
+```
+
+Configuration 对象封装了客户端或服务器的配置，通过设置配置文件读取类路径来实现。第一个方法返回的是默认文件系统（默认为本地文件系统，可以在 core-site.xml 中指定）。第二个方法通过给定的 URI 方案和权限来确定要使用的文件系统，如果给定的 URI 中没有指定方案，则返回默认文件系统。第三个是作为给定用户来访问文件系统。
+
+在某些情况下，可能希望获取本地文件系统的运行实例，此时可以使用一下方法获取：
+
+```Java
+public static LocalFileSystem getLocal(Configuration conf)
+    throws IOException {
+    return (LocalFileSystem)get(LocalFileSystem.NAME, conf);
+  }
+```
+
+有了 FileSystem 实例之后，我们调用 open() 函数来获取文件的输入流：
+
+```Java
+public abstract FSDataInputStream open(Path f, int bufferSize)
+    throws IOException;
+    
+/**
+ * 默认的缓冲区大小为 4KB
+ */
+  public FSDataInputStream open(Path f) throws IOException {
+    return open(f, getConf().getInt("io.file.buffer.size", 4096));
+  }
+```
+
+范例 3-2：
+
+```Java
+// cc FileSystemCat Displays files from a Hadoop filesystem on standard output by using the FileSystem directly
+import java.io.InputStream;
+import java.net.URI;
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.IOUtils;
+
+// vv FileSystemCat
+public class FileSystemCat {
+
+  public static void main(String[] args) throws Exception {
+    String uri = args[0];
+    Configuration conf = new Configuration();
+    FileSystem fs = FileSystem.get(URI.create(uri), conf);
+    InputStream in = null;
+    try {
+      in = fs.open(new Path(uri));
+      IOUtils.copyBytes(in, System.out, 4096, false);
+    } finally {
+      IOUtils.closeStream(in);
+    }
+  }
+}
+// ^^ FileSystemCat
+```
+
+运行测试：
+
+```shell
+hadoop FileSystemCat hdfs://localhost:9000/user/root/input/1901.txt
+```
+
+实际上，FileSystem 对象中的 open() 方法返回的是 FSDataInputStream 对象，而不是标准的 java.io 类对象。这个类是继承了 java.io.DataInputStream 的一个特殊类，并支持随机访问，由此可以从流的任意位置读取数据。
+
+```Java
+package org.apache.hadoop.fs;
+
+public class FSDataInputStream extends DataInputStream
+    implements Seekable, PositionedReadable, 
+      ByteBufferReadable, HasFileDescriptor, CanSetDropBehind, CanSetReadahead,
+      HasEnhancedByteBufferAccess { ... }
+```
+
+Seekable 接口支持在文件中找到指定位置，并提供一个查询当前位置相对于文件起始位置偏移量的查询方法 getPos()。
+
+```Java
+public interface Seekable {
+  
+  void seek(long pos) throws IOException;
+  
+  long getPos() throws IOException;
+}
+```
+
+调用 seek() 来定位大于文件长度的位置会引发 IOException。与 java.io.InputStream 的 skip() 不同，seek() 可以移到文件中任意一个绝对位置，skip() 则只能现对于当前位置定位到另一个新位置。 
+
+```Java
+// cc FileSystemDoubleCat Displays files from a Hadoop filesystem on standard output twice, by using seek
+import java.net.URI;
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FSDataInputStream;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.IOUtils;
+
+// vv FileSystemDoubleCat
+public class FileSystemDoubleCat {
+
+  public static void main(String[] args) throws Exception {
+    String uri = args[0];
+    Configuration conf = new Configuration();
+    FileSystem fs = FileSystem.get(URI.create(uri), conf);
+    FSDataInputStream in = null;
+    try {
+      in = fs.open(new Path(uri));
+      IOUtils.copyBytes(in, System.out, 4096, false);
+      in.seek(0); // go back to the start of the file
+      IOUtils.copyBytes(in, System.out, 4096, false);
+    } finally {
+      IOUtils.closeStream(in);
+    }
+  }
+}
+// ^^ FileSystemDoubleCat
+
+```
+
+测试结果：
+
+```shell
+hadoop FileSystemDoubleCat hdfs://localhost:9000/user/root/input/test.txt
+```
+
+PositionedReadable 接口可以从一个指定偏移量处读取文件的一部分。
+
+```Java
+public interface PositionedReadable {
+   
+  public int read(long position, byte[] buffer, int offset, int length)
+    throws IOException;
+  
+  public void readFully(long position, byte[] buffer, int offset, int length)
+    throws IOException;
+  
+  public void readFully(long position, byte[] buffer) throws IOException;
+}
+```
+
+read() 方法从文件的指定 position 处读取至多为 length 字节的数据并存入缓冲区 buffer 的指定偏移量 offset 处。返回值是实际读到的字节数：调用者需要检查这个值，它有可能小于指定的 length 长度。
+
+readFully() 方法将指定 length 长度的字节数数据读取到 buffer 中（或在只接受 buffer 字节数组的版本中，读取 buffer.length 长度字节数据），除非已经读到文件末尾，这种情况下将抛出 EOFException。
+
+所有的这些方法会保留文件当前偏移量，并且是线程安全的（FSDataInputStream 并不是为并发访问设计的，因此最好为此新建多个实例），因此它们提供了在读取文件主体时，访问文件其他部分（可能是元数据）的便利方法。
+
+seek() 方法是一个相对高开销的操作，需要慎重使用。建议用流数据来构建应用的访问模式（比如使用 MapReduce），而非执行大量 seek() 方法。
+
+3. 写入数据
+
+p84
