@@ -873,3 +873,243 @@ private transient volatile long baseCount;
 // 在竟争激烈的状态下启用，线程会把总数更新情况存放到该结构内
 // 当竞争进一步加剧时，会通过扩容减少竞争
 private transient volatile CounterCell[] counterCells;
+
+
+ThreadPoolExecutor
+
+public ThreadPoolExecutor(
+				int corePoolSize,
+				int maximumPoolSize,
+				long keepAliveTime,
+				TimeUnit unit,
+				BlockingQueue<Runnable> workQueue,
+				ThreadFactory threadFactory,
+				RejectedExecutionHandler handler) {
+	if (corePoolSize < 0 ||
+		maximumPoolSize <= 0 ||
+		maximumPoolSize < corePoolSize ||
+		keepAliveTime < 0)
+		throw new IllegalArgumentException();
+	if (workQueue == null || threadFactory == null || handler == null)
+		throw new NullPointerException();
+	this.acc = System.getSecurityManager() == null ?
+			null :
+			AccessController.getContext();
+	this.corePoolSize = corePoolSize;
+	this.maximumPoolSize = maximumPoolSize;
+	this.workQueue = workQueue;
+	this.keepAliveTime = unit.toNanos(keepAliveTime);
+	this.threadFactory = threadFactory;
+	this.handler = handler;
+}
+
+
+// 初始值为 线程池能接受新任务且线程数为0
+private final AtomicInteger ctl = new AtomicInteger(ctlOf(RUNNING, 0));
+// Integer有32位，最左边3位表示线程池状态，右边29位表示工作线程数
+private static final int COUNT_BITS = Integer.SIZE - 3;
+// 线程容量，但实际为掩码，用于位的与运算
+// 000 - 11111111111111111111111111111
+private static final int CAPACITY   = (1 << COUNT_BITS) - 1;
+
+// 111 - 00000000000000000000000000000
+// 此状态表示线程池能接受新任务
+private static final int RUNNING    = -1 << COUNT_BITS;
+// 000 - 00000000000000000000000000000
+// 此状态表示线程池不能接受新任务，但可以继续执行队列中的任务
+private static final int SHUTDOWN   =  0 << COUNT_BITS;
+// 001 - 00000000000000000000000000000
+// 此状态表示线程池全面拒绝，并中断正在处理的任务
+private static final int STOP       =  1 << COUNT_BITS;
+// 010 - 00000000000000000000000000000
+// 此状态表示线程池中所有的任务都被终止了
+private static final int TIDYING    =  2 << COUNT_BITS;
+// 011 - 00000000000000000000000000000
+// 此状态表示已清理完现场
+private static final int TERMINATED =  3 << COUNT_BITS;
+
+// c & 111 - 00000000000000000000000000000，有0得0，可得到状态值
+private static int runStateOf(int c)     { return c & ~CAPACITY; }
+// c & 000 - 11111111111111111111111111111，有0得0，可得到线程数
+private static int workerCountOf(int c)  { return c & CAPACITY; }
+// 有1得1，可合并出ctl
+private static int ctlOf(int rs, int wc) { return rs | wc; }
+
+private static boolean runStateLessThan(int c, int s) {
+	return c < s;
+}
+
+private static boolean runStateAtLeast(int c, int s) {
+	return c >= s;
+}
+
+private static boolean isRunning(int c) {
+	return c < SHUTDOWN;
+}
+
+public void execute(Runnable command) {
+	if (command == null)
+		throw new NullPointerException();
+	
+
+	int c = ctl.get();
+	// 如果工作线程数小于核心线程数，则创建线程任务并执行
+	if (workerCountOf(c) < corePoolSize) {
+		// 判断常驻核心线程数
+		if (addWorker(command, true))
+			return;
+		// 如果创建任务失败，防止外部已经在线程池中加入新任务，重新获取一下
+		c = ctl.get();
+	}
+
+	// 只有线程池处于RUNNING状态，才执行workQueue.offer - 置入队列
+	if (isRunning(c) && workQueue.offer(command)) {
+		int recheck = ctl.get();
+		// 如果线程池当前不是RUNNING状态，则将刚加入队列的任务移除，之后唤醒拒绝策略
+		if (! isRunning(recheck) && remove(command))
+			reject(command);
+		// 如果之前的线程已经被消费完，新建一个线程，判断最大允许线程数
+		else if (workerCountOf(recheck) == 0)
+			addWorker(null, false);
+	}
+	// 核心池和队列都已满，尝试创建一个新线程，判断最大允许线程数
+	else if (!addWorker(command, false))
+		// 如果创建失败，则唤醒拒绝策略
+		reject(command);
+}
+
+
+// 根据当前线程池状态，检查是否可以添加新的任务线程，如果可以则创建并启动任务
+private boolean addWorker(Runnable firstTask, boolean core) {
+	retry: // 配合循环语旬出现的label ，类似于goto作用。
+	for (;;) {
+		int c = ctl.get();
+		int rs = runStateOf(c);
+
+		// 如果RUNNING状态，则条件为假，不执行后面的判断
+		// 如果为STOP及之上的状态，或者初始线程firstTask不为空，或者队列为空
+		// 都会直接导致创建失败
+		if (rs >= SHUTDOWN &&
+			! (rs == SHUTDOWN &&
+			   firstTask == null &&
+			   ! workQueue.isEmpty()))
+			return false;
+
+		for (;;) {
+			int wc = workerCountOf(c);
+			// 如果线程数超过容量则不能再添加新的线程。
+			// 如果线程数超过常驻核心线程数 最大允许线程数
+			if (wc >= CAPACITY ||
+				wc >= (core ? corePoolSize : maximumPoolSize))
+				return false;
+			// 将当前活动线程数+1，原子性操作
+			// 该方法执行失败的概率非常低。即使失败，
+			// 再次执行时成功的概率也是极高的，类似于自旋锁原理。
+			if (compareAndIncrementWorkerCount(c))
+				break retry;
+			
+			// ctl是可变化的，需要经常读取最新值
+			c = ctl.get(); 
+			// 如果线程池已关闭，则再次循环
+			if (runStateOf(c) != rs)
+				continue retry;
+			// 否则，由于WorkerCount更改，CAS失败；retry内部循环
+		}
+	}
+
+	// 开始创建工作线程
+	boolean workerStarted = false;
+	boolean workerAdded = false;
+	Worker w = null;
+	try {
+		// 利用Worker构造方法中的线程池工厂创建线程，并封装成工作线程Worker类
+		w = new Worker(firstTask);
+		// 获取Worker中的属性对象thread
+		final Thread t = w.thread;
+		if (t != null) {
+			// 在进行ThreadPoolExecutor的敏感操作时，需要加主锁，避免在添加和启动线程时被干扰
+			final ReentrantLock mainLock = this.mainLock;
+			mainLock.lock();
+			try {
+				// 当保持锁的时候重新检查
+				// 如果ThreadFactory发生故障或在获取锁之前关闭，则退出
+				int rs = runStateOf(ctl.get());
+				// 线程池为RUNNING状态 或 线程池为RUNNING状态且初始线程firstTask为空
+				if (rs < SHUTDOWN ||
+					(rs == SHUTDOWN && firstTask == null)) {
+					if (t.isAlive()) // 预检t是否启动
+						throw new IllegalThreadStateException();
+					// private final HashSet<Worker> workers = new HashSet<Worker>();
+					// 运用HashSet存储了线程池中所有的工作线程，只有在保持主锁的时候才访问
+					workers.add(w);
+					int s = workers.size();
+					// largestPoolSize 为整个线程池在运行期间的最大并发任务个数
+					if (s > largestPoolSize)
+						largestPoolSize = s;
+					workerAdded = true;
+				}
+			} finally {
+				mainLock.unlock();
+			}
+			if (workerAdded) {
+				// 通过查看下面Worker类的源码，发现启动的是新创建的线程t，
+				// 而非execute方法的参数command指向的线程
+				t.start();
+				workerStarted = true;
+			}
+		}
+	} finally {
+		// 线程启动失败，需要移除刚添加工作线程并减去当前活动线程数
+		if (! workerStarted)
+			addWorkerFailed(w);
+	}
+	return workerStarted;
+}
+
+private void addWorkerFailed(Worker w) {
+	final ReentrantLock mainLock = this.mainLock;
+	mainLock.lock();
+	try {
+		// 移除工作线程
+		if (w != null)
+			workers.remove(w);
+		// 减去当前活动线程数
+		decrementWorkerCount();
+		tryTerminate();
+	} finally {
+		mainLock.unlock();
+	}
+}
+
+private void decrementWorkerCount() {
+	do {} while (! compareAndDecrementWorkerCount(ctl.get()));
+}
+
+// 使用了CAS
+private boolean compareAndDecrementWorkerCount(int expect) {
+	return ctl.compareAndSet(expect, expect - 1);
+}
+
+public final boolean compareAndSet(int expect, int update) {
+	return unsafe.compareAndSwapInt(this, valueOffset, expect, update);
+}
+
+private final class Worker
+        extends AbstractQueuedSynchronizer
+        implements Runnable
+{
+	final Thread thread;
+	Runnable firstTask;
+
+	Worker(Runnable firstTask) {
+		// AbstractQueuedSynchronized 的方法
+		setState(-1); // 在调用runWorker之前禁止线程被中断
+		this.firstTask = firstTask;
+		this.thread = getThreadFactory().newThread(this);
+	}
+
+	// 当thread被start()之后，执行runWorker
+	public void run() {
+		runWorker(this);
+	}
+}

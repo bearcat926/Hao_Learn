@@ -1018,7 +1018,7 @@ Java 的类加载器是一个运行时核心基础设施模块，主要是在启
 
 ![1566107945279](E:\git_repo\Hao_Learn\2019\8\img\1566107945279.png)
 
-类加载是一个将 .class 字节码文件实例化成 Class 对象并进行相关初始化的过程。在这个过程中， JVM 会初始化继承树上还没有被初始化过的所有父类，并且会执行这个链路上所有未执行过的静态代码块、静态变量赋值语旬等。某些类在使用时，也可以按需由类加载器进行加载。
+类加载是一个将 .class 字节码文件实例化成 Class 对象并进行相关初始化的过程。在这个过程中， JVM 会初始化继承树上还没有被初始化过的所有父类，并且会执行这个链路上所有未执行过的静态代码块、静态变量赋值语句等。某些类在使用时，也可以按需由类加载器进行加载。
 
 全小写的 class 是关键字，用来定义类，而首字母大写的 Class ，它是所有 class 的类。
 
@@ -2558,11 +2558,337 @@ CyclicBarrier 是基于同步到达某个点的信号量触发机制。CyclicBar
 - **隔离线程环境**。通过配置独立的线程池将服务隔离开，避免各服务线程相互影响。
 
 ThreadPoolExecutor 的构造方法如下：
-p247
 
+```Java
+public ThreadPoolExecutor(
+				int corePoolSize,
+				int maximumPoolSize,
+				long keepAliveTime,
+				TimeUnit unit,
+				BlockingQueue<Runnable> workQueue,
+				ThreadFactory threadFactory,
+				RejectedExecutionHandler handler) {
+	if (corePoolSize < 0 ||
+		maximumPoolSize <= 0 ||
+		maximumPoolSize < corePoolSize ||
+		keepAliveTime < 0)
+		throw new IllegalArgumentException();
+	if (workQueue == null || threadFactory == null || handler == null)
+		throw new NullPointerException();
+	this.acc = System.getSecurityManager() == null ?
+			null :
+			AccessController.getContext();
+	this.corePoolSize = corePoolSize;
+	this.maximumPoolSize = maximumPoolSize;
+	this.workQueue = workQueue;
+	this.keepAliveTime = unit.toNanos(keepAliveTime);
+	this.threadFactory = threadFactory;
+	this.handler = handler;
+}
+```
 
+1. corePoolSize 表示常驻核心线程数。如果等于 0，则任务执行完之后没有任何请求进入时销毁线程池的线程；如果大于 0，即使本地任务执行完毕，核心线程也不会被销毁。这个值的设置非常关键，设置过大会浪费资源，设置过小会导致线程频繁地创建或销毁。
+2. maximumPoolSize 表示线程池能够容纳同时执行的最大线程数，必须大于或等于 1。如果待执行的线程数大于此值，需要借助第 5 个参数的帮助，将线程缓存在队列中。如果 maximumPoolSize 与 corePoolSize 相等，即是固定大小线程池。
+3. keepAliveTime 表示线程池中的线程空闲时间，当某线程空闲时间达该值时，就会被销毁，直到只剩下 corePoolSize 个线程为止，避免浪费内存和句柄资源。在默认情况下，当线程池的线程数大于 corePoo!Size 时，keepAliveTime 才会起作用。
+4. TimeUnit 表示时间单位。 keepAliveTime 的时间单位通常是TimeUnit.SECONDS。
+5. workQueue 表示缓存队列。当请求的线程数大于 maximumPoolSize 线程进入 BlockingQueue 阻塞队列。LinkedBlockingQueue 是单向链表，使用锁来控制入队和出队的原子性，两个锁分别控制元素的添加和获取，是一个生产消费模型队列。
+6. threadFactory 表示线程工厂。它用来生产一组相同任务的结程。线程池的命名是通过给这个 factory 增加组名前缀来实现的。在虚拟机栈分析时，就可以知道线程任务是由哪个线程工厂产生的。
+7. handler 表示执行拒绝策略的对象。当超过workQueue 的任务缓存区上限时，就可以通过该策略处理请求，这是一种简单的限流保护。友好的拒绝策略可以是如下三种：
 
-## 7.5 ThreadLocal - p259
+- 保存到数据库进行削峰填谷。在空闲时再提取出来执行。
+- 转向某个提示页面。
+- 打印日志。
+
+在构造方法中，队列、线程工厂、拒绝处理服务都必须有实例对象，但在实际编程中，很少有程序员对这三者进行实例化，而通过 Executors 这个线程池静态工厂提供默认实现。
+
+![1567234536395](E:\git_repo\Hao_Learn\2019\8\img\1567234536395.png)
+
+核心方法 Executor.execute () 没有在抽象类 AbstractExecutorService 里实现。因为所有的任务都在这个方法里执行，不同实现会带来不同的执行策略。
+
+通过 Executors 的静态工厂方法可以创建三个线程池的包装对象：ForkJoinPool、ThreadPooIExecutor、ScheduledThreadPoolExecutor。
+
+Executors 核心的方法有五个：
+
+1. Executors.newWorkStealingPool：JDK8 引人，创建持有足够线程的线程池支持给定的并行度，并通过使用多个队列减少竞争，此构造方法中 CPU 数量设置为默认的并行度。
+
+```Java
+public static ExecutorService newWorkStealingPool() {
+        return new ForkJoinPool
+            (Runtime.getRuntime().availableProcessors(),
+             ForkJoinPool.defaultForkJoinWorkerThreadFactory,
+             null, true);
+    }
+```
+
+2. Executors.newCachedThreadPool：maximumPoolSize 最大可以至Integer.MAX_VALUE， 是高度可伸缩的线程池。 keepAliveTime 默认为 60 秒，工作线程处于空闲状态，则回收工作线程。如果任务数增加，再次创建出新线程处理任务。
+
+3. Executors.newScheduledThreadPool：线程数最大至 Integer.MAX_VALUE，是 ScheduledExecutorService 接口家族的实现类，支持定时及周期性任务执行。相 Timer，ScheduledExecutorService 更安全，功能更强大，与 newCachedThreadPool 的区别是不回收工作线程。
+
+4. Executors.newSingleThreadExecutor：创建个单线程的线程池，相当于单线程串行执行所有任务，保证接任务的提交顺序依次执行。
+
+5. Executors.newFixedThreadPool : 输入的参数即是固定线程数，既是核心线程数也是最大线程数，不存在空闲线程，所以 keepAliveTime 等于 0。
+
+```Java
+public static ExecutorService newFixedThreadPool(int nThreads) {
+	return new ThreadPoolExecutor(nThreads, 
+		nThreads, 0L, TimeUnit.MILLISECONDS, 
+		new LinkedBlockingQueue<Runnable>());
+}
+
+public LinkedBlockingQueue() {
+	this(Integer.MAX_VALUE);
+}
+```
+
+使用这样的无界队列，如果瞬间请求非常大，会有 OOM 的风险。除newWorkStealingPool 外，其他四个创建方式都存在资源耗尽的风险。
+
+Executors 中默认的线程工厂和拒绝策略过于简单，通常对用户不够友好。
+
+线程工厂需要做创建前的准备工作，对线程池创建的线程必须明确标识，并为线程本身指定有意义的名称和相应的序列号。可以通过实现 ThreadFactory 接口及其 newThread() 方法快速、统一地创建线程任务，方便出错时回溯。
+
+拒绝策略应该考虑到业务场景，返回相应的提示或者友好地跳转。可以通过实现 RejectedExecutionHandler 接口及其 rejectedExecution() 方法，来打印出当前线程池状态。
+
+ThreadPoolExecutor 中提供了四个公开的内部静态类
+• AbortPolicy（默认）：丢弃任务并抛出 RejectedExecutionException 异常。
+• DiscardPolicy：丢弃任务，但是不抛出异常，这是不推荐的做法。
+• DiscardOldestPolicy：抛弃队列中等待最久的任务，然后把当前任务加入队列中。
+• CallerRunsPolicy ：调用任务的 run() 方法绕过线程池直接执行。
+
+#### 线程池源码详解
+
+在 ThreadPoolExecutor 的属性定义中频繁地用位移运算来表示线程池状态，位移运算是改变当前值的一种高效手段，包括左移与右移。
+
+```Java
+// 初始值为 线程池能接受新任务且线程数为0
+private final AtomicInteger ctl = new AtomicInteger(ctlOf(RUNNING, 0));
+// Integer有32位，最左边3位表示线程池状态，右边29位表示工作线程数
+private static final int COUNT_BITS = Integer.SIZE - 3;
+// 线程容量，但实际为掩码，用于位的与运算
+// 000 - 11111111111111111111111111111
+private static final int CAPACITY   = (1 << COUNT_BITS) - 1;
+
+// 这样设计的好处是可以通过比较值的大小来确定线程池的状态。
+// 111 - 00000000000000000000000000000
+// 此状态表示线程池能接受新任务
+private static final int RUNNING    = -1 << COUNT_BITS;
+// 000 - 00000000000000000000000000000
+// 此状态表示线程池不能接受新任务，但可以继续执行队列中的任务
+private static final int SHUTDOWN   =  0 << COUNT_BITS;
+// 001 - 00000000000000000000000000000
+// 此状态表示线程池全面拒绝，并中断正在处理的任务
+private static final int STOP       =  1 << COUNT_BITS;
+// 010 - 00000000000000000000000000000
+// 此状态表示线程池中所有的任务都被终止了
+private static final int TIDYING    =  2 << COUNT_BITS;
+// 011 - 00000000000000000000000000000
+// 此状态表示已清理完现场
+private static final int TERMINATED =  3 << COUNT_BITS;
+
+// c & 111 - 00000000000000000000000000000，有0得0，可得到状态值
+private static int runStateOf(int c)     { return c & ~CAPACITY; }
+// c & 000 - 11111111111111111111111111111，有0得0，可得到线程数
+private static int workerCountOf(int c)  { return c & CAPACITY; }
+// 有1得1，可合并出ctl
+private static int ctlOf(int rs, int wc) { return rs | wc; }
+
+private static boolean runStateLessThan(int c, int s) {
+	return c < s;
+}
+
+private static boolean runStateAtLeast(int c, int s) {
+	return c >= s;
+}
+
+private static boolean isRunning(int c) {
+	return c < SHUTDOWN;
+}
+```
+
+ThreadPoolExecutor 关于 execute 方法的实现：
+
+```Java
+public void execute(Runnable command) {
+	if (command == null)
+		throw new NullPointerException();
+	
+
+	int c = ctl.get();
+	// 如果工作线程数小于核心线程数，则创建线程任务并执行
+	if (workerCountOf(c) < corePoolSize) {
+		// 判断常驻核心线程数
+		if (addWorker(command, true))
+			return;
+		// 如果创建任务失败，防止外部已经在线程池中加入新任务，重新获取一下
+		c = ctl.get();
+	}
+
+	// 只有线程池处于RUNNING状态，才执行workQueue.offer - 置入队列
+	if (isRunning(c) && workQueue.offer(command)) {
+		int recheck = ctl.get();
+		// 如果线程池当前不是RUNNING状态，则将刚加入队列的任务移除，之后唤醒拒绝策略
+		if (! isRunning(recheck) && remove(command))
+			reject(command);
+		// 如果之前的线程已经被消费完，新建一个线程，判断最大允许线程数
+		else if (workerCountOf(recheck) == 0)
+			addWorker(null, false);
+	}
+	// 核心池和队列都已满，尝试创建一个新线程，判断最大允许线程数
+	else if (!addWorker(command, false))
+		// 如果创建失败，则唤醒拒绝策略
+		reject(command);
+}
+```
+
+发生拒绝的理由有两个：线程池状态为非 RUNNING 状态；等待队列己满。
+
+```Java
+// 根据当前线程池状态，检查是否可以添加新的任务线程，如果可以则创建并启动任务
+private boolean addWorker(Runnable firstTask, boolean core) {
+	retry: // 配合循环语旬出现的label ，类似于goto作用。
+	for (;;) {
+		int c = ctl.get();
+		int rs = runStateOf(c);
+
+		// 如果RUNNING状态，则条件为假，不执行后面的判断
+		// 如果为STOP及之上的状态，或者初始线程firstTask不为空，或者队列为空
+		// 都会直接导致创建失败
+		if (rs >= SHUTDOWN &&
+			! (rs == SHUTDOWN &&
+			   firstTask == null &&
+			   ! workQueue.isEmpty()))
+			return false;
+
+		for (;;) {
+			int wc = workerCountOf(c);
+			// 如果线程数超过容量则不能再添加新的线程。
+			// 如果线程数超过常驻核心线程数 最大允许线程数
+			if (wc >= CAPACITY ||
+				wc >= (core ? corePoolSize : maximumPoolSize))
+				return false;
+			// 将当前活动线程数+1
+			// 使用 Atomiclnteger 对象的加1操作是原子性的
+			// 该方法执行失败的概率非常低。即使失败，
+			// 再次执行时成功的概率也是极高的，类似于自旋锁原理。
+			if (compareAndIncrementWorkerCount(c))
+				break retry;
+			
+			// ctl是可变化的，需要经常读取最新值
+			c = ctl.get(); 
+			// 如果线程池已关闭，则再次循环
+			if (runStateOf(c) != rs)
+				continue retry;
+			// 否则，由于WorkerCount更改，CAS失败；retry内部循环
+		}
+	}
+
+	// 开始创建工作线程
+	boolean workerStarted = false;
+	boolean workerAdded = false;
+	Worker w = null;
+	try {
+		// 利用Worker构造方法中的线程池工厂创建线程，并封装成工作线程Worker类
+		w = new Worker(firstTask);
+		// 获取Worker中的属性对象thread
+		final Thread t = w.thread;
+		if (t != null) {
+			// 在进行ThreadPoolExecutor的敏感操作时，需要加主锁，避免在添加和启动线程时被干扰
+			final ReentrantLock mainLock = this.mainLock;
+			mainLock.lock();
+			try {
+				// 当保持锁的时候重新检查
+				// 如果ThreadFactory发生故障或在获取锁之前关闭，则退出
+				int rs = runStateOf(ctl.get());
+				// 线程池为RUNNING状态 或 线程池为RUNNING状态且初始线程firstTask为空
+				if (rs < SHUTDOWN ||
+					(rs == SHUTDOWN && firstTask == null)) {
+					if (t.isAlive()) // 预检t是否启动
+						throw new IllegalThreadStateException();
+					// private final HashSet<Worker> workers = new HashSet<Worker>();
+					// 运用HashSet存储了线程池中所有的工作线程，只有在保持主锁的时候才访问
+					workers.add(w);
+					int s = workers.size();
+					// largestPoolSize 为整个线程池在运行期间的最大并发任务个数
+					if (s > largestPoolSize)
+						largestPoolSize = s;
+					workerAdded = true;
+				}
+			} finally {
+				mainLock.unlock();
+			}
+			if (workerAdded) {
+				// 通过查看下面Worker类的源码，发现启动的是新创建的线程t，
+				// 而非execute方法的参数command指向的线程
+				t.start();
+				workerStarted = true;
+			}
+		}
+	} finally {
+		// 线程启动失败，需要移除刚添加工作线程并减去当前活动线程数
+		if (! workerStarted)
+			addWorkerFailed(w);
+	}
+	return workerStarted;
+}
+
+private void addWorkerFailed(Worker w) {
+	final ReentrantLock mainLock = this.mainLock;
+	mainLock.lock();
+	try {
+		// 移除工作线程
+		if (w != null)
+			workers.remove(w);
+		// 减去当前活动线程数
+		decrementWorkerCount();
+		tryTerminate();
+	} finally {
+		mainLock.unlock();
+	}
+}
+
+private void decrementWorkerCount() {
+	do {} while (! compareAndDecrementWorkerCount(ctl.get()));
+}
+
+// 使用了CAS
+private boolean compareAndDecrementWorkerCount(int expect) {
+	return ctl.compareAndSet(expect, expect - 1);
+}
+
+public final boolean compareAndSet(int expect, int update) {
+	return unsafe.compareAndSwapInt(this, valueOffset, expect, update);
+}
+```
+
+```Java
+private final class Worker
+        extends AbstractQueuedSynchronizer
+        implements Runnable
+{
+	final Thread thread;
+	Runnable firstTask;
+
+	Worker(Runnable firstTask) {
+		// AbstractQueuedSynchronized 的方法
+		setState(-1); // 在调用runWorker之前禁止线程被中断
+		this.firstTask = firstTask;
+		this.thread = getThreadFactory().newThread(this);
+	}
+
+	// 当thread被start()之后，执行runWorker
+	public void run() {
+		runWorker(this);
+	}
+}
+```
+
+使用线程池要注意如下几点：
+1. 合理设置各类参数，应根据实际业务场景来设置合理的工作线程数。
+2. 线程资源必须通过线程池提供，不允许在应用中自行显式创建线程。
+3. 创建线程或线程池时请指定有意义的线程名称，方便出错时回溯。
+
+线程池不允许使用 Executors ，而是通过 ThreadPoolExecutor 的方式创建 ，这样的处理方式能更加明确线程池的运行规则，规避资源耗尽的风险。
+
+## 7.5 ThreadLocal
 
 ThreadLocal 初衷是在线程并发时，解决变量共享问题，但由于过度设计，比如弱引用和哈希碰撞，导致理解难度大、使用成本高，反而成为故障高发点，容易出现内存泄漏、脏数据、共享对象更新等问题。
 
@@ -2901,5 +3227,125 @@ AIR 原则具体包括：
 
 ## 8.2 单元测试覆盖率
 
-p281
+1. 粗粒度的覆盖
 
+粗粒度的覆盖包括类覆盖和方法覆盖两种。
+
+2. 细粒度的覆盖
+
+- 行覆盖（ Line Coverage ）
+
+行覆盖也称为语句覆盖，用来度量可执行的语句是否被执行到。行覆盖率的计算公式的分子是执行到的语句行数，分母是总的可执行语句行数。行覆盖的覆盖强度并不高，但由于容易计算，因此在主流的覆盖率工具中，它依然是一个十分常见的参考指标。
+
+- 分支覆盖（Branch Coverage）
+
+分支覆盖也称为判定覆盖，用来度量程序中每一个判定分支是否都被执行到。分支覆盖率的计算公式中的分子是代码中被执行到的分支数，分母是代码中所有分支的总数。
+
+- 条件判定覆盖（Condition Decision Coverage）
+
+条件判定覆盖要求设计足够的测试用例，能够让判定中每个条件的所有可能情况至少被执行一次，同时每个判定本身的所有可能结果也至少执行一次。
+
+＠CsvSource 注解使得我们可以通过定义一个 String 数组来定义多次运行测试时的参数列表，而每一个 String 值通过逗号分隔后的结果，就是每一次测试运行时的实际参数值。
+
+分支覆盖只要求覆盖分支所有可能的结果，可以看出它是条件判定覆盖的一个子集。
+
+- 条件组合覆盖
+
+条件组合覆盖是指判定中所有条件的各种组合情况都出现至少一次。
+
+对于一个包含了 n 个条件的判定，至少需要 2^n^ 个测试用例才可以。虽然这种覆盖足够严谨，但无疑给编写测试用例增加了指数级的工作量。
+
+- 路径覆盖（Path Coverage）
+
+路径覆盖要求能够测试到程序中所有可能的路径。
+
+## 8.3 单元测试编写
+
+#### JUnit 单元测试框架
+
+JUnit5.x 由以下三个主要模块组成：
+
+- JUnit Platform：用于在 JVM 上启动测试框架，统一命令行、 Gradle 和 Maven 等方式执行测试的人口。
+- JUnit Jupiter：包含 JUnit5.x 全新的编程模型和扩展机制。
+- JUnit Vintage：用于在新的框架中兼容运行 JUnit3.x 和 JUnit4.x 测试用例。
+
+![1567169895599](E:\git_repo\Hao_Learn\2019\8\img\1567169895599.png) 
+
+＠DisplayName 注解可以标注测试用例名，但仅仅对于采用 IDE 或图形化方式展示测试运行结果的场景有效
+
+分组测试和数据驱动测试也是单元测试中十分实用的技巧。其中，分组测试能够实现测试在运行频率维度上的分层。通过@Tag ，并在 Maven 中配置以下设置实现：
+```xml
+<build>
+    <plugins>
+        <plugin>
+            <artifactid>maven-surefire-plugin</artifactid>
+            <version>2.22.0</version>
+            <configuration>
+                <properties>
+                    <includeTags>fast</includeTags>
+                    <excludeTags>slow</excludeTags>
+                </properties>
+            </configuration>
+        </plugin>
+    </plugins>
+</build>
+```
+
+
+数据驱动测试适用于计算密集型的算法单元，这些功能单元内部逻辑复杂，对于不同的输入会得到截然不同的输出，通过＠TestFactory 注解可以实现。
+
+```Java
+@DisplayName("售票器类型测试")
+public class ExchangeRateConverterTest {
+
+    @TestFactory
+    @DisplayName("时间售票检查")
+    Stream<DynamicTest> oddNumberDynamicTestWithStream() {
+    	ticketSeller.setCloseTime(LocalTime.of(l2, 20, 25, 0));
+		return Stream.of(
+			Lists.list("提前购票", LocalTime.of(12, 20, 24, 0), true),
+			Lists.list("准点购买", Loca1Time.of(12, 20, 25, 0), true),
+			Lists.list("晚点购票", Loca1Time.of(12, 20, 26, 0), false)
+		)
+		.map(data -> DynamicTest.dynamicTest((String)data.get(0),
+			() -> assertThat(ticketSeller.cloudSellAt(data.get(l)))
+			.isEqualTo(data.get(2)))); 
+	}
+
+}
+```
+
+#### 断言与假设
+
+关注测试方法的细节处理， 这就离不开断言（assert）和假设（assume）：断言封装好了常用的判断逻辑 ，当不满足条件时，该测试用例会被认定为测试失败；假设与断言类似，只不过当条件不满足时，测试会直接退出而不是认定为测试失败，最终记录的状态是跳过。
+
+常用的断言被封装在 org.junit.jupiter.api.Assertions 类中，均为静态方法：
+
+![1567172813144](E:\git_repo\Hao_Learn\2019\8\img\1567172813144.png)
+
+相较于断言，假设提供的静态方法更加简单，被封装在 org.junit.jupiter.api.Assumptions 类中，同样为静态方法：
+
+![1567172874816](E:\git_repo\Hao_Learn\2019\8\img\1567172874816.png)
+
+相对于假设，断言更为重要。这些断言方法中的大多数从 JUnit 的早期版本就已经存在，并且在最新的 JUnit 5.x 版本中依然保持着很好的兼容性。
+
+对于断言的选择，优先采用更精确的断言。
+
+对于非相等情况的判定，比如大于、小于或者更复杂的情况，可以使用 assertTrue 或 assertFalse 表达；对于特别复杂的条件判定，直接使用任何一种断言方法都不容易表达时，则可以使用 Java 语句自行构造条件，然后在不符合预期的情况下直接使用 fail 断言方法将测试标记为失败。
+
+assertTimeout 和 assertTimeoutPreemptively 断言的差异在于，前者会在操作超时后继续执行，并在最终的测试报告中记录操作的实际执行时间；后者在到达指定时间后立即结束，在最终的报告中只体现出操作超时，但不包含实际执行的耗时。
+
+断言负责验证逻辑 以及数据的合法性和完整性，所以有一种说法：“在单元测
+试方法中没有断言就不是完整的测试”。
+
+AssertJ 的最大特点是流式断言（Fluent Assertions），与 Builder Chain（构造链）模式或 Java8 的 stream&filter 写法类似。它允许一个目标对象通过各种 Fluent Assert API 的连接判断，进行多次断言，并且对 IDE 更友好。
+
+AssertJ 的 assertThat 的处理方法和之前有些不同，它利用 Java 的泛型，而且增加了目标类型对应的 XxxxAssert 类，其签名为：`public static AbstractCharSequenceAssert<?, String> assertThat(String actual)`，而 JUnit 中的`public static void assertThat()`是 void 返回。
+
+如果是我们自定义的 JavaBean 该如何判断？
+1. AssertJ 通过 AssertJ assertions generator 来生成 对应的 XxxAssert 类
+2. 辅助我们对模板 JavaBean 对象进行断言 API 判断。
+
+![1567173574113](E:\git_repo\Hao_Learn\2019\8\img\1567173574113.png)
+
+AssertJ 的断言代码要清爽许多，流式断言充分利用了 Java 8 之后的匿名方法和 Stream 类型的特点，很好地对 JUnit 断言方法进行了补充。
