@@ -665,7 +665,7 @@ Hadoop 有一个抽象的文件系统概念，HDFS 只是其中的一个实现�
 
 Hadoop 的 Filesystem 类是与 Hadoop 的某一文件系统进行交互的 API。通过集成 FileSystem 抽象类，并编写代码，可以使其在不同文件系统中可移植。
 
-1. 从 Hadoop URL 读取数据
+###### 从 Hadoop URL 读取数据
 
 要从 Hadoop 文件系统读取文件，最简单的方法是使用 java.net.URL 对象打开数据流，从中读取数据。
 
@@ -687,7 +687,8 @@ public class URLCat {
      * 通过FsUrlStreamHandlerFactory实例调用 
      * java.net.URL对象的setURLStreamHandlerFactory()方法
      * JVM只能调用一次这个方法，因此通常在静态方法中调用。
-     * 这个限制意味着如果程序的其他组件声明了一个UrlStreamHandlerFactory实例，
+     * 这个限制意味着如果程序的其他组件声明了一个
+     * UrlStreamHandlerFactory实例，
      * 则将无法再次使用这种方法从Hadoop中读取数据。
      */
     URL.setURLStreamHandlerFactory(new FsUrlStreamHandlerFactory());
@@ -698,9 +699,10 @@ public class URLCat {
     try {
       in = new URL(args[0]).openStream();
       /**
-       * 调用Hadoop中简洁的IOUtils类，并在finally字句中关闭数据流，
-       * 同时也可以在输入/输出流之间复制数据。copyBytes的最后两个参数，
-       * 第一个设置用于复制的缓冲区大小，第二个设置复制结束后是否关闭数据流。
+       * 调用Hadoop中简洁的IOUtils类，并在finally字句中关闭数据
+       * 流，同时也可以在输入/输出流之间复制数据。copyBytes的最后
+       * 两个参数，第一个设置用于复制的缓冲区大小，第二个设置复制结
+       * 束后是否关闭数据流。
        */
       IOUtils.copyBytes(in, System.out, 4096, false);
     } finally {
@@ -723,7 +725,7 @@ export HADOOP_CLASSPATH=ch03-hdfs-4.0.jar
 hadoop URLCat hdfs://localhost:9000/user/root/input/1901.tx
 ```
 
-2. 通过 FileSystem API 读取数据
+###### 通过 FileSystem API 读取数据
 
 Hadoop 文件系统中通过 Hadoop Path 对象（而非 java.io.File 对象，因为它的语义与本地文件系统联系太紧密）来代表文件。可以将路径视为一个 Hadoop 文件系统URI。
 
@@ -738,15 +740,19 @@ public static FileSystem get(URI uri, Configuration conf) throws IOException {
     String scheme = uri.getScheme();
     String authority = uri.getAuthority();
 
-    if (scheme == null && authority == null) {     // use default FS
-      return get(conf);
+	// use default FS
+    if (scheme == null && authority == null) {    
+    	return get(conf);
     }
 
-    if (scheme != null && authority == null) {     // no authority
-      URI defaultUri = getDefaultUri(conf);
-      if (scheme.equals(defaultUri.getScheme())    // if scheme matches default
-          && defaultUri.getAuthority() != null) {  // & default has authority
-        return get(defaultUri, conf);              // return default
+    if (scheme != null && authority == null) {     
+    // no authority
+    URI defaultUri = getDefaultUri(conf);
+    // if scheme matches default & default has authority
+    if (scheme.equals(defaultUri.getScheme())    
+        && defaultUri.getAuthority() != null) {  
+        // return default
+        return get(defaultUri, conf);              
       }
     }
     
@@ -815,14 +821,18 @@ public class FileSystemCat {
 
   public static void main(String[] args) throws Exception {
     String uri = args[0];
+    // 创建配置对象
     Configuration conf = new Configuration();
+    // 通过get方法获取FileSystem
     FileSystem fs = FileSystem.get(URI.create(uri), conf);
     InputStream in = null;
     try {
-      in = fs.open(new Path(uri));
-      IOUtils.copyBytes(in, System.out, 4096, false);
+        // 通过fileSystem.open方法获取输入流
+        in = fs.open(new Path(uri));
+        // 复制数据
+        IOUtils.copyBytes(in, System.out, 4096, false);
     } finally {
-      IOUtils.closeStream(in);
+        IOUtils.closeStream(in);
     }
   }
 }
@@ -876,11 +886,13 @@ public class FileSystemDoubleCat {
     String uri = args[0];
     Configuration conf = new Configuration();
     FileSystem fs = FileSystem.get(URI.create(uri), conf);
+    // FSDataInputStream 类支持随机访问
     FSDataInputStream in = null;
     try {
       in = fs.open(new Path(uri));
       IOUtils.copyBytes(in, System.out, 4096, false);
-      in.seek(0); // go back to the start of the file
+      // 通过 seek 方法返回到文件开头
+      in.seek(0); 
       IOUtils.copyBytes(in, System.out, 4096, false);
     } finally {
       IOUtils.closeStream(in);
@@ -920,6 +932,241 @@ readFully() 方法将指定 length 长度的字节数数据读取到 buffer 中�
 
 seek() 方法是一个相对高开销的操作，需要慎重使用。建议用流数据来构建应用的访问模式（比如使用 MapReduce），而非执行大量 seek() 方法。
 
-3. 写入数据
+###### 写入数据
 
-p84
+FileSystem 类有一系列新建文件的方法。最简单的方法是给准备建的文件指定一个 Path 对象，然后返回一个用于写入数据的输出流：
+
+```Java
+public FSDataOutputStream create(Path f) throws IOException
+```
+此方法有多个重载版本，可以指定是否需要强制覆盖现有文件，文件备份数量、写入文件时所用缓冲区的大小、文件块大小以及文件权限。
+
+create() 方法能够为需要写入且当前不存在的文件创建父目录。如果希望父目录不存在就导致文件写入失败，则应该先调用 exists() 方法检查父目录是否存在。另一种方案是使用 FileContext ，可以控制是否创建父目录。
+
+还有一个重载方法 Progressable 用于传递回调接口，如此一来，可以把数据写入 datanode 的进度通知给应用。
+
+```Java
+package org.apache.hadoop.util;
+
+public interface Progressable {
+  public void progress();
+}
+```
+
+另一种新建文件的方法是使用 append() 方法在一个现有文件末尾追加数据（还有其他一些重载版本）：
+
+```Java
+public FSDataOutputStream append(Path f) throws IOException
+```
+
+这样的追加操作允许一个 writer 打开文件后再访问该文件的最后偏移量处追加数据。有了这个 API，某些应用可以创建无边界文件，例如，应用可以在关闭日志文件之后继续追加日志。该追加操作是可选的，并非所有 Hadoop 文件系统都实现了该操作。例如，HDFS 支持追加，但 S3 文件系统就不支持。
+
+每次 Hadoop 调用 progress() 方法时，也就是每次将 64KB 数据包写入 datanode 管线后，打印一个时间点来显示整个运行过程。
+
+范例 3-4 将本地文件复制到 Hadoop 文件系统
+
+```Java
+// cc FileCopyWithProgress Copies a local file to a Hadoop filesystem, and shows progress
+import java.io.BufferedInputStream;
+import java.io.FileInputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.URI;
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.IOUtils;
+import org.apache.hadoop.util.Progressable;
+
+// vv FileCopyWithProgress
+public class FileCopyWithProgress {
+  public static void main(String[] args) throws Exception {
+    String localSrc = args[0];
+    String dst = args[1];
+    
+    // 通过 FileInputStream 构造方法创建文件输入流，并包装缓冲流
+    InputStream in = new BufferedInputStream(new FileInputStream(localSrc));
+    
+    Configuration conf = new Configuration();
+    
+    FileSystem fs = FileSystem.get(URI.create(dst), conf);
+    // 通过create创建OutputStream
+    OutputStream out = fs.create(new Path(dst), new Progressable() {
+        // progress 方法用于在单行处理完成之后进行回调
+        public void progress() {
+          System.out.print(".");
+        }
+    });
+    // 最后一个参数为true，则结束后关闭数据流
+    IOUtils.copyBytes(in, out, 4096, true);
+  }
+}
+// ^^ FileCopyWithProgress
+
+```
+
+```shell
+hadoop FileCopyWithProgress test.txt hdfs://localhost:9000/user/root/output/test.txt
+```
+
+FIleSystem 实例的 create() 方法返回 FSDataOutputStream 对象，与 FSDataInputStream 类相似，它也有一个查询文件当前位置的方法。
+
+```Java
+package org.apache.hadoop.fs;
+
+public class FSDataOutputStream extends DataOutputStream
+    implements Syncable, CanSetDropBehind {
+    
+    public long getPos() throws IOException {
+    	// return cached position
+		return position;  
+    }
+    // implementation elided
+}
+```
+
+但与 FSDataInputStream 类不同的是，FSDataOutputStream 类不允许在文件中定位。这是因为 HDFS 只允许对一个已打开的文件顺序写入，或在现有文件的末尾追加数据，因为定位写入位置确实没有什么意义。
+
+#### 目录
+
+Filesystem 实例提供了创建目录的方法：
+
+```Java
+public boolean mkdirs(Path f) throws IOException
+```
+
+这个方法可以一次性新建所有需要创建但不存在的父目录。如果目录（以及所有父目录）都已经创建成功，则返回true。
+
+#### 查询文件系统
+
+1. 文件元数据：FileStatus
+
+任何文件系统的一个重要特征都是提供其目录结构浏览和检索它所存文件和目录相关信息的功能。FIleStatus 类封装了文件系统中文件和目录的元数据，包括文件长度、块大小、复本、修改时间、所有者以及权限信息。
+
+FileSystem 的 getFIleStatus() 方法用于获取文件或目录的 FileStatus 对象。
+
+范例3-5 展示文件状态信息
+
+```Java
+// cc ShowFileStatusTest Demonstrates file status information
+import static org.junit.Assert.*;
+import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.Matchers.lessThanOrEqualTo;
+
+import java.io.*;
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.*;
+import org.apache.hadoop.hdfs.MiniDFSCluster;
+import org.junit.*;
+
+// vv ShowFileStatusTest
+public class ShowFileStatusTest {
+  
+  // 使用进程内的HDFS集群进行测试
+  private MiniDFSCluster cluster; 
+  private FileSystem fs;
+
+  @Before
+  public void setUp() throws IOException {
+    Configuration conf = new Configuration();
+    if (System.getProperty("test.build.data") == null) {
+      System.setProperty("test.build.data", "/tmp");
+    }
+    cluster = new MiniDFSCluster.Builder(conf).build();
+    fs = cluster.getFileSystem();
+    OutputStream out = fs.create(new Path("/dir/file"));
+    out.write("content".getBytes("UTF-8"));
+    out.close();
+  }
+  
+  @After
+  public void tearDown() throws IOException {
+    if (fs != null) { fs.close(); }
+    if (cluster != null) { cluster.shutdown(); }
+  }
+  
+  @Test(expected = FileNotFoundException.class)
+  public void throwsFileNotFoundForNonExistentFile() throws IOException {
+    fs.getFileStatus(new Path("no-such-file"));
+  }
+  
+  @Test
+  public void fileStatusForFile() throws IOException {
+    Path file = new Path("/dir/file");
+    
+    FileStatus stat = fs.getFileStatus(file);
+    // 获取文件目录：Path.URL(分层URI).decodedPath(此URI的解码路径组件)
+    assertThat(stat.getPath().toUri().getPath(), is("/dir/file"));
+    // 是否是目录
+    assertThat(stat.isDirectory(), is(false));
+    // 获取长度
+    assertThat(stat.getLen(), is(7L));
+    // 获取修改时间
+    assertThat(stat.getModificationTime(), is(lessThanOrEqualTo(System.currentTimeMillis())));
+    // 获取文件的复本
+    assertThat(stat.getReplication(), is((short) 1));
+     // 获取文件的块大小
+    assertThat(stat.getBlockSize(), is(128 * 1024 * 1024L));
+    // 获取文件的拥有者
+    assertThat(stat.getOwner(), is(System.getProperty("user.name")));
+     // 获取文件的拥有组
+    assertThat(stat.getGroup(), is("supergroup"));
+     // 获取文件的权限
+    assertThat(stat.getPermission().toString(), is("rw-r--r--"));
+  }
+  
+  @Test
+  public void fileStatusForDirectory() throws IOException {
+    Path dir = new Path("/dir");
+    FileStatus stat = fs.getFileStatus(dir);
+    assertThat(stat.getPath().toUri().getPath(), is("/dir"));
+    assertThat(stat.isDirectory(), is(true));
+    assertThat(stat.getLen(), is(0L));
+    assertThat(stat.getModificationTime(),
+        is(lessThanOrEqualTo(System.currentTimeMillis())));
+    assertThat(stat.getReplication(), is((short) 0));
+    assertThat(stat.getBlockSize(), is(0L));
+    assertThat(stat.getOwner(), is(System.getProperty("user.name")));
+    assertThat(stat.getGroup(), is("supergroup"));
+    assertThat(stat.getPermission().toString(), is("rwxr-xr-x"));
+  }
+  
+}
+// ^^ ShowFileStatusTest
+```
+
+2. 列出文件
+
+FileSystem.listStatus() 查找一个文件或目录相关的相关的信息很实用，但通常还需要能够列出目录的中的内容。
+
+```Java
+public abstract FileStatus[] listStatus(Path f) throws FileNotFoundException, IOException;
+  
+public FileStatus[] listStatus(Path f, PathFilter filter) 
+        throws FileNotFoundException, IOException {
+    ArrayList<FileStatus> results = new ArrayList<FileStatus>();
+    listStatus(results, f, filter);
+    return results.toArray(new FileStatus[results.size()]);
+}
+
+public FileStatus[] listStatus(Path[] files)
+        throws FileNotFoundException, IOException {
+    return listStatus(files, DEFAULT_FILTER);
+}
+
+public FileStatus[] listStatus(Path[] files, 
+    PathFilter filter) throws FileNotFoundException,           IOException {
+    ArrayList<FileStatus> results = new ArrayList<FileStatus>();
+    for (int i = 0; i < files.length; i++) {
+      listStatus(results, files[i], filter);
+    }
+    return results.toArray(new 	
+        FileStatus[results.size()]);
+}
+```
+
+当传入的参数是一个文件时，它会简单转变成以数组方式返回长度为 1 的 FileStatus 对象。当传入参数是一个目录时，则返回 0 或多个 FileStatus 对象，表示此目录中包含的文件和目录。
+
+它的重载方法允许使用 PathFilter 来限制匹配的文件和目录。如果指定一组路径，其执行结果相当于依次轮流传递每条路径并对其调用 listStatus() 方法，再将所有 FileStatus 对象存入同一数组中，该方法更为方便。在从文件系统树的不同分支构建输入文件列表时，

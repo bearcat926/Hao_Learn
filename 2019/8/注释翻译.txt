@@ -1,0 +1,37 @@
+Proceed in 3 steps:
+
+1. If fewer than corePoolSize threads are running, try to
+start a new thread with the given command as its first
+task.  The call to addWorker atomically checks runState and
+workerCount, and so prevents false alarms that would add
+threads when it shouldn't, by returning false.
+
+2. If a task can be successfully queued, then we still need
+to double-check whether we should have added a thread
+(because existing ones died since last checking) or that
+the pool shut down since entry into this method. So we
+recheck state and if necessary roll back the enqueuing if
+stopped, or start a new thread if there are none.
+
+3. If we cannot queue task, then we try to add a new
+thread.  If it fails, we know we are shut down or saturated
+and so reject the task.
+
+分三步进行：
+
+1。如果运行的线程少于corepoolsize，请尝试
+用给定的命令作为第一个线程启动新线程
+任务。对AddWorker的调用自动检查运行状态和
+WorkerCount，这样可以防止错误的警报
+不应该的时候线程，返回false。
+
+2。如果任务可以成功排队，那么我们仍然需要
+再次检查是否应该添加线程
+（因为上次检查后已有的死亡）或
+自进入此方法以来，池已关闭。所以我们
+重新检查状态，必要时回滚排队
+已停止，如果没有线程，则启动新线程。
+
+三。如果无法对任务进行排队，则尝试添加新的
+线程。如果失败了，我们就知道我们被关闭或饱和了。
+所以拒绝这个任务。
