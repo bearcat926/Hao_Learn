@@ -61,7 +61,7 @@ MapReduce 程序本质上是并行运行的，因此可以将大规模的数据�
 
 MapReduce 任务过程分为两个处理阶段：map 阶段和 reduce 阶段。每阶段都以键值对作为输入和输出，其类型由程序员来选择。程序员还需要写两个函数：map 函数和 reduce 函数。
 
-#### 使用Hadoop分析数据 - 气象数据集
+#### 2.1~2.3 使用Hadoop分析数据 - 气象数据集
 
 map函数由 Mapper 类来表示，后者声明一个抽象的 map() 方法。
 ```Java
@@ -258,7 +258,7 @@ hadoop fs -cat /user/root/output/part-r-00000
 1901	317
 ```
 
-#### 横向扩展
+#### 2.4 横向扩展
 
 为了实现横向扩展（scaling out），我们需要把数据存储在 DFS 中（典型的为 HDFS），通过使用 YARN ，Hadoop 可以将 MapReduce 计算转移到存储有部分数据的各台机器上。
 
@@ -342,7 +342,7 @@ public class MaxTemperatureWithCombiner {
 
 这个程序用不着修改便可以在一个完整的数据集上直接运行。这是 MapReduce 的优势：他可以根据数据量的大小和硬件规模进行扩展。
 
-#### Hadoop Streaming
+#### 2.5 Hadoop Streaming
 
 Hadoop Streaming 使用 Unix 标准流作为 Hadoop 和应用程序之间的接口，所以可以使用任何编程语言通过标准输入/输出来写 MapReduce 程序。
 
@@ -361,7 +361,7 @@ Java API 控制的 map 函数一次只处理一条记录。针对输入数据中
 
 HDFS 是 Hadoop 的旗舰级文件系统，但实际上 Hadoop 是一个综合性的文件系统抽象。
 
-#### HDFS 的设计
+#### 3.1 HDFS 的设计
 
 HDFS 以**流式数据访问**（一次写入、多次读取）模式来存储**超大文件**（指具有几百 MB、几百 GB、甚至几百 TB 大小的文件），运行于商用硬件（即普通硬件）集群上。
 
@@ -373,9 +373,9 @@ HDFS 是为高数据吞吐量应用优化的，这可能会以提高时间延迟
 
 HDFS 中的文件写入只支持单个写入者，而且写操作总是以“只添加”方式在文件末尾写数据。**不支持多个写入者操作，也不支持在文件的任意位置进行修改**。
 
-#### HDFS 的概念
+#### 3.2 HDFS 的概念
 
-1. 数据块
+###### 数据块
 
 磁盘块是磁盘进行数据读/写的最小单位，一般为 512B。
 
@@ -463,7 +463,7 @@ FSCK ended at Thu Aug 29 16:22:09 CST 2019 in 3 milliseconds
 The filesystem under path '/' is HEALTHY
 ```
 
-2. namenode 和 datanode
+###### namenode 和 datanode
 
 HDFS 集群有两类节点以管理节点-工作节点模式运行，即一个 namenode（管理节点）和多个 datanode（工作节点）。namenode 管理文件系统的命名空间。它维护着文件系统树及整棵树内所有的文件和目录。这些信息以两个文件形式永久保存在本地磁盘上：命名空间镜像文件和编辑日志文件。namenode 也记录着每个文件中各个块所在的数据节点信息，但它并不永久保存块的位置信息，因为这些信息会在系统启动时根据数据节点信息重建。
 
@@ -476,13 +476,13 @@ datanode 使文件系统的工作节点。他们根据需要存储并检索数�
 - 备份那些组成文件系统元数据持久状态的文件。Hadoop 可以通过配置使 namenode 在多个文件系统上保存元数据的持久状态。这些写操作是实时同步的，且为原子操作。一般的配置是，将持久状态写入本地磁盘的同时，写入一个远程挂载的网络文件系统（NFS）。
 - 运行一个辅助 namenode，但它不能被用作 namenode。这个辅助 namenode 的重要作用是定期合并并保存编辑日志与命名空间镜像，以防止编辑日志过大，并且会在 namenode 发生故障时启用。但由于辅助 namenode 保存的状态总是滞后于主节点，所以难免会丢失部分数据。在这种情况下，一般把存储在 NFS 上的 namenode 元数据复制到辅助 namenode 并作为新的主 namenode 运行。 辅助 namenode 一般在另一台单独的物理计算机上运行，因为需要占用大量 CPU 时间，并且需要与 namenode 一样多的内存来执行合并操作。
 
-3. 块缓存
+###### 块缓存
 
 通常 datanode 从磁盘中读取块，但对于访问频繁的文件，其对应的块可能被显式地缓存在datanode 的内存中，以堆外块缓存（off-heap block cache）的形式存在。默认情况下，一个块仅缓存在一个 datanode 的内存中。作业调度器（用于 MapReduce、Spark 和其他框架的）通过在缓存块的 datanode 上运行任务，可以利用块缓存的优势提高读操作的性能。
 
 用户或应用通过在缓存池（cache pool）中增加一个 cache directive 来告诉 namenode 需要缓存哪些文件及存多久。缓存池是一个用于管理缓存权限和资源使用的管理性分组。
 
-4. HDFS 的高可用性
+###### HDFS 的高可用性
 
 namenode 是唯一存储元数据与文件到数据块映射的地方。
 
@@ -525,7 +525,7 @@ QJM 是一个专用的 HDFS 实现，为提供一个高可用的编辑日志而�
 
 客户端的故障转移通过客户端类库实现透明处理。最简单的实现是通过客户端的配置文件实现故障转移的控制。HDFS URI 使用一个逻辑主机名，该主机名映射到一对 namenode 地址，客户端类库会访问每一个 namenode 地址直至处理完成。
 
-#### 命令行接口 - 操作 HDFS 的基本命令
+#### 3.3 命令行接口 - 操作 HDFS 的基本命令
 
 1. 打印文件列表（ls）
 
@@ -655,13 +655,13 @@ hadoop fs -du -h /
 hadoop fs -du -s / 
 ```
 
-#### Hadoop 文件系统
+#### 3.4 Hadoop 文件系统
 
 Hadoop 有一个抽象的文件系统概念，HDFS 只是其中的一个实现。Java 抽象类 `org.apache.hadoop.fs.FileSystem`定义了 Hadoop 中一个文件系统的客户端接口，并且该抽象类有几个具体实现：
 
 ![1567135657608](E:\git_repo\Hao_Learn\2019\8\img\1567135657608.png)
 
-#### Java 接口
+#### 3.5 Java 接口
 
 Hadoop 的 Filesystem 类是与 Hadoop 的某一文件系统进行交互的 API。通过集成 FileSystem 抽象类，并编写代码，可以使其在不同文件系统中可移植。
 
@@ -669,7 +669,7 @@ Hadoop 的 Filesystem 类是与 Hadoop 的某一文件系统进行交互的 API�
 
 要从 Hadoop 文件系统读取文件，最简单的方法是使用 java.net.URL 对象打开数据流，从中读取数据。
 
-范例 3-1：
+范例 3-1.URLStreamHandler：
 
 ```Java
 // cc URLCat Displays files from a Hadoop filesystem on standard output using a URLStreamHandler
@@ -804,7 +804,7 @@ public abstract FSDataInputStream open(Path f, int bufferSize)
   }
 ```
 
-范例 3-2：
+范例 3-2.FileSystem ：
 
 ```Java
 // cc FileSystemCat Displays files from a Hadoop filesystem on standard output by using the FileSystem directly
@@ -868,6 +868,8 @@ public interface Seekable {
 ```
 
 调用 seek() 来定位大于文件长度的位置会引发 IOException。与 java.io.InputStream 的 skip() 不同，seek() 可以移到文件中任意一个绝对位置，skip() 则只能现对于当前位置定位到另一个新位置。 
+
+范例 3-3.使用 seek() 方法：
 
 ```Java
 // cc FileSystemDoubleCat Displays files from a Hadoop filesystem on standard output twice, by using seek
@@ -963,7 +965,7 @@ public FSDataOutputStream append(Path f) throws IOException
 
 每次 Hadoop 调用 progress() 方法时，也就是每次将 64KB 数据包写入 datanode 管线后，打印一个时间点来显示整个运行过程。
 
-范例 3-4 将本地文件复制到 Hadoop 文件系统
+范例 3-4.将本地文件复制到 Hadoop 文件系统：
 
 ```Java
 // cc FileCopyWithProgress Copies a local file to a Hadoop filesystem, and shows progress
@@ -1028,7 +1030,7 @@ public class FSDataOutputStream extends DataOutputStream
 
 但与 FSDataInputStream 类不同的是，FSDataOutputStream 类不允许在文件中定位。这是因为 HDFS 只允许对一个已打开的文件顺序写入，或在现有文件的末尾追加数据，因为定位写入位置确实没有什么意义。
 
-#### 目录
+###### 目录
 
 Filesystem 实例提供了创建目录的方法：
 
@@ -1038,7 +1040,7 @@ public boolean mkdirs(Path f) throws IOException
 
 这个方法可以一次性新建所有需要创建但不存在的父目录。如果目录（以及所有父目录）都已经创建成功，则返回true。
 
-#### 查询文件系统
+###### 查询文件系统
 
 1. 文件元数据：FileStatus
 
@@ -1046,7 +1048,7 @@ public boolean mkdirs(Path f) throws IOException
 
 FileSystem 的 getFIleStatus() 方法用于获取文件或目录的 FileStatus 对象。
 
-范例3-5 展示文件状态信息
+范例 3-5.展示文件状态信息：
 
 ```Java
 // cc ShowFileStatusTest Demonstrates file status information
@@ -1169,4 +1171,170 @@ public FileStatus[] listStatus(Path[] files,
 
 当传入的参数是一个文件时，它会简单转变成以数组方式返回长度为 1 的 FileStatus 对象。当传入参数是一个目录时，则返回 0 或多个 FileStatus 对象，表示此目录中包含的文件和目录。
 
-它的重载方法允许使用 PathFilter 来限制匹配的文件和目录。如果指定一组路径，其执行结果相当于依次轮流传递每条路径并对其调用 listStatus() 方法，再将所有 FileStatus 对象存入同一数组中，该方法更为方便。在从文件系统树的不同分支构建输入文件列表时，
+它的重载方法允许使用 PathFilter 来限制匹配的文件和目录。如果指定一组路径，其执行结果相当于依次轮流传递每条路径并对其调用 listStatus() 方法，再将所有 FileStatus 对象存入同一数组中，该方法更为方便。这个方法在从文件系统树的不同分支构建输入文件列表时非常管用。
+
+范例 3-6.显示Hadoop 文件系统中一组路径的文件信息：
+
+```Java
+// cc ListStatus Shows the file statuses for a collection of paths in a Hadoop filesystem 
+import java.net.URI;
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.FileUtil;
+import org.apache.hadoop.fs.Path;
+
+// vv ListStatus
+public class ListStatus {
+
+  public static void main(String[] args) throws Exception {
+    String uri = args[0];
+    System.out.println(args[0]);
+    Configuration conf = new Configuration();
+    FileSystem fs = FileSystem.get(URI.create(uri), conf);
+    
+    Path[] paths = new Path[args.length];
+    for (int i = 0; i < paths.length; i++) {
+      paths[i] = new Path(args[i]);
+    }
+    
+    //fileSystem.listStatus(Path[] paths) 通过一个Path对象数组获取FileStaus对象数组
+    FileStatus[] status = fs.listStatus(paths);
+    // FileUtil.stat2Paths(FileStatus[] stats)) 将一个FIleStaus对象数组转换为一个Path对象数组
+    Path[] listedPaths = FileUtil.stat2Paths(status);
+    for (Path p : listedPaths) {
+      System.out.println(p);
+    }
+  }
+}
+// ^^ ListStatus
+```
+
+测试结果：
+
+```shell
+# 显示一组路径集目录列表的并集
+hadoop ListStatus hdfs://localhost:9000/ hdfs://localhost:9000/user/root/
+
+hdfs://localhost:9000/opt
+hdfs://localhost:9000/root
+hdfs://localhost:9000/user
+hdfs://localhost:9000/user/root/-p
+hdfs://localhost:9000/user/root/input
+hdfs://localhost:9000/user/root/output
+```
+
+3. 文件模式
+
+Hadoop 可以执行通配（globbing），并由 FileSystem 提供的两个 globStatus 方法实现：
+
+```Java
+public FileStatus[] globStatus(Path pathPattern) throws IOException {
+    return new Globber(this, pathPattern, DEFAULT_FILTER).glob();
+  }
+
+public FileStatus[] globStatus(Path pathPattern, PathFilter filter)
+      throws IOException {
+    return new Globber(this, pathPattern, filter).glob();
+  }
+```
+
+globStatus() 方法返回是有路径格式与指定模式匹配的所有 FIleStatus 对象组成的数组，并按路径排序。PathFilter 参数作为可选项可以进一步对匹配结果进行限制。
+
+表 3-2.通配符及其含义（Hadoop 支持的通配符与 Unix bash shell 支持的相同）：
+
+![1567391692179](E:\git_repo\Hao_Learn\2019\9\img\1567391692179.png)
+
+4. PathFilter
+
+FileSystem 中的 listStatus() 和 globStatus() 方法提供了可选的 PathFilter 对象，已编程方式控制通配符：
+
+```Java
+package org.apache.hadoop.fs;
+
+import org.apache.hadoop.classification.InterfaceAudience;
+import org.apache.hadoop.classification.InterfaceStability;
+
+@InterfaceAudience.Public
+@InterfaceStability.Stable
+public interface PathFilter {
+ 
+    boolean accept(Path path);
+}
+
+// FileFilter 与 PathFilter 相似，但 accept 方法的参数是 File
+package java.io;
+
+@FunctionalInterface
+public interface FileFilter {
+
+    boolean accept(File pathname);
+}
+```
+
+范例 3-7.PathFilter：
+
+```Java
+// cc RegexExcludePathFilter A PathFilter for excluding paths that match a regular expression
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.PathFilter;
+
+// vv RegexExcludePathFilter
+public class RegexExcludePathFilter implements PathFilter {
+  
+  private final String regex;
+
+  public RegexExcludePathFilter(String regex) {
+    this.regex = regex;
+  }
+
+  public boolean accept(Path path) {
+    // 匹配则返回 false
+    return !path.toString().matches(regex);
+  }
+}
+// ^^ RegexExcludePathFilter
+```
+
+这个过滤器只传递不匹配于正则表达式的文件。在通配符选出一组初始文件之后，可使用过滤器优化结果。
+
+![1567393765813](E:\git_repo\Hao_Learn\2019\9\img\1567393765813.png)
+
+以 Path 为例，过滤器只能作用于文件名，不能针对文件的属性来构建过滤器。
+
+###### 删除数据
+
+使用 FileSystem 的 delete() 方法可以永久性删除文件或目录。
+
+```Java
+public boolean delete(Path f, boolean recursive) throws IOException
+```
+
+如果 f 是一个文件或空目录，那么 recursive 的值就会被忽略。只有在 recursive 为 true 时，非空目录及其内容才会被删除（否则会抛出 IOException 异常）。
+
+#### 3.6 数据流
+
+###### 剖析（anatomy）文件读取
+
+读取文件时事件的发生顺序：
+
+客户端通过调用 FileSystem 对象的 open() 来打开要读取的文件，对于 HDFS 来说，这个对象是 DistributedFileSystem 的一个实例。它通过使用 RPC（远程过程调用）来调用 namenode，以确定文件起始块的位置。对于每一个块，namenode 返回存有该块复本的 datanode 地址。此外 datanode 根据它们与客户端的距离来排序（根据集群的网络拓扑）。如果 该客户端本身就是一个 namenode（比如在一个 MapReduce 任务中），那么该客户端将会从保存有相应数据块复本的本地 namenode 读取数据。
+
+![1567408442514](E:\git_repo\Hao_Learn\2019\9\img\1567408442514.png)
+
+DistributedFileSystem 类调用 open()方法会返回一个 FSDataInputStream 对象（一个支持文件定位的输入流）给客户端以便读取数据。FSDataInputStream 继而封装了一个 DFSInputStream，用于管理 datanode	和 namenode 的 I/O。
+
+客户端随之在流中调用 read() 方法。为文件起始块存储了 datanode 地址的 DFSInputStream 随后为第一个文件起始块连接第一个（最近的一个）的 datanode。数据从 datanode 被传输回到重复调用 read() 的客户端。当到达块的末尾时，DFSInputStream 将关闭对该 datanode 的连接，然后为下一个块找到最佳的 datanode 。所有这些对于客户端都是透明的，在它看来只是在读取一个连续的流。
+
+如同客户端从流中读取数据，随着 DFSInputStream 对 datanode 打开新的连接，块被按顺序读取。在必要时（as needed），为了下一批块，它也将调用 namenode 去检索 datanode 位置 。当客户端完成读取，它对 FSDataInputStream 中调用 close() 。
+
+读取数据中，如果 DFSInputStream 在于 datanode 通信时遇到错误，会尝试从这个块的下一个最邻近的 datanode 读取数据。它也将记住那些发生故障的 datanode，因此它为了后来的块不是不必要的重试它们。DFSInputStream 也会通过校验和确认从 datanode 发来的数据是否完整。如果发现有损坏的块，DFSInputStream 会试图从其他的 datanode 读取其复本，也会将损坏的块通知给 namenode。
+
+这个设计的一个重要方面是，客户端可以直接连接到 datanode 检索数据，且通过 namenode，客户端被引导到每个块所在的最佳 datanode。由于数据流分散（spread across）在集群中的所有 datanode，所以这种设计允许 HDFS 扩展到大量的并发客户端。同时，namenode 仅仅（merely）需要服务块位置的请求（这些信息存储在内存，因此非常高效），例如，namenode不服务数据，随着客户机数量的增长，数据很快就会成为瓶颈。
+
+###### 剖析文件写入
+
+![1567408487422](E:\git_repo\Hao_Learn\2019\9\img\1567408487422.png)
+
+客户端通过在 DistributedFileSystem 对象中调用 create() 来新建文件。DistributedFileSystem 对 namenode 创建一个 RPC 调用，在文件系统的命名空间中新建一个文件，此时该文件中还有没相应的数据块。namenode 执行各种不同的检查以确保这个文件不存在以及客户端有新建该文件的权限。如果这些检查均通过，namenode 就会为创建新文件记录一条记录；否则，文件创建失败并向客户端抛出一个 IOException。DistributedFileSystem 向客户端返回一个 FSDataOutputStream 对象
