@@ -661,6 +661,20 @@ Hadoop 有一个抽象的文件系统概念，HDFS 只是其中的一个实现�
 
 ![1567135657608](E:\git_repo\Hao_Learn\2019\8\img\1567135657608.png)
 
+###### HTTP
+
+由 WebHDFS 协议提供的 HTTP REST API 则使得其他语言开发的应用能够更方便地与 HDFS 交互。注意，HTTP 接口比原生的 Java 客户端要慢，所以不到万不得已，尽量不要用它来传输特大数据。
+
+通过 HTTP 来访问 HDFS 有两种方法：直接访问，HDFS 守护进程直接服务于来自客户端的 HTTP 请求；通过代理（一个或多个）访问，客户端通常使用 DistributedFileSystem API 访问 HDFS。两者都使用了 WebHDFS 协议。
+
+![1567515162093](E:\git_repo\Hao_Learn\2019\9\img\1567515162093.png)
+
+在第一种情况中， namenode 和 datanode 内嵌的 web 服务器作为 WebHDFS 的端节点运行。（由于 dfs.webhdfs.enabled 被设置为 true，WebHDFS 默认是启用状态。）文件元数据操作由 namenode 管理，文件读写操作首先被发往 namenode，由 namenode 发送一个 HTTP 重定向至某个客户端，指示以流方式传输文件数据的目的或源 datanode。
+
+第二种方法依靠一个或多个独立代理服务器通过 HTTP 访问 HDFS。（由于代理服务是无状态的，因此可以运行在标准的负载均衡器之后。）所有到集群的网络通信都需要经过代理，因此客户端从来不直接访问 namenode 和 datanode。使用代理服务器后可以使用更严格的防火墙策略和带宽限制策略。通常情况下都通过代理服务器，实现在不同数据中心中部署的 Hadoop 集群之间的数据传输，或从外部网络访问云端运行的 Hadoop 集群。
+
+HttpFS 代理提供和 WebHDFS 相同的 HTTP（和 HTTPS）接口，这样客户端能够通过 webhdfs（swebhdfs）URI 访问这两类接口。HttpFS 代理的启动独立于 namenode 和 datanode 的守护进程，使用httpfs.sh 脚本，默认在一个不同的端口上监听（端口号14000）。
+
 #### 3.5 Java 接口
 
 Hadoop 的 Filesystem 类是与 Hadoop 的某一文件系统进行交互的 API。通过集成 FileSystem 抽象类，并编写代码，可以使其在不同文件系统中可移植。
@@ -1426,9 +1440,9 @@ assertThat(fs.getFileStatus(p).getLen(),
 
 #### 3.7 通过 distcp 并行复制
 
-前面着重介绍单线程访问的 HDFS 访问模型。例如，通过指定文件通配符，可以对一组文件进行处理，但是为了提高性能，需要写一个程序来并行处理这些文件。Hadoop 自带一个有用程序 distcp，该程序可以并行从 Hadoop 文件系统中复制大量数据，也可以将大量数据复制到 Hadoop 中。
+我们看到的 HDFS 访问模式（pattern）到目前为止都聚焦于单线程访问 。例如，通过指定文件通配符，可能对一系列文件（a collectionof）有作用，但是关于这些文件的高效并行处理，你需要自己写一个程序。Hadoop 自带一个有用的程序 distcp，该程序可以以并行方式复制大量数据从（到） Hadoop 文件系统。
 
-Distcp 的一种用法是代替 `hadoop fs -cp`。例如，我们可以将文件复制到另一个文件中，也可以复制目录：
+distcp 的一种用法是高效的代替 `hadoop fs -cp`。例如，我们可以将文件复制到另一个文件中，也可以复制目录：
 
 ```shell
 hadoop distcp file1 file2
@@ -1436,24 +1450,41 @@ hadoop distcp file1 file2
 hadoop distcp dir1 dir2
 ```
 
-如果 dir2 不存在，将新建 dir2，目录 dir1 的内容全部复制到 dir2 下。可以指定多个原路径，所有原路径下的内容都将被复制到目标路径下。如果 dir2 已经存在，那么目录 dir1 复制到 dir2 下，形成目录结构 dir2/dir1。
+如果 dir2 不存在，将新建 dir2，目录 dir1 的内容全部复制到 dir2 下。可以指定多种源路径，所有内容都将被复制到目标路径（destination）下。
 
-使用 -overwrite 选项可以在保持同样的目录结构的同时强制覆盖原有文件
+如果 dir2 已经存在，那么目录 dir1 复制到 dir2 下，形成目录结构 dir2/dir1。使用`-overwrite`选项可以在保持同样的目录结构的同时强制覆盖原有文件。使用`-update`选项，仅更新发生变化的文件。即如果我们在 dir1 的子树中改变了一个文件，通过运行这个命令，我们可以同步命令到 dir2。
 
-p99；94
+TIP：如果不确定 distcp 操作的效果，最好先现在一个小的测试目录树下试运行。
+
+即使对于单个文件复制，由于`hadoop fs -cp`通过运行命令的客户端进行文件复制，因此更倾向于使用 distcp 变种复制大文件。
+
+distcp 是作为一个 MapReduce 作业来实现的，该复制作业是通过集群中并行运行的 map 来完成。这里没有 reducer。每个文件通过一个 map 进行复制，而且 distcp 通过将文件放入大致（roughly）相等的分配（allocation），试图为每一个 map 分配大约（approximately）相等数量的数据来执行。默认情况下，将近 20 个 map 被使用，但是可以通过为 distcp 指定 `-m`参数来修改 map 的数量。
+
+关于 distcp 的一个常见使用实例实在两个 HDFS 集群间传送数据。例如，以下命令在第二个集群上为第一个集群创建了一个备份：
 
 ```shell
-
+hadoop distcp -update -delete -p hdfs://namenode1/src hdfs://namenode2/back-src
 ```
+
+`-delete`选项导致（cause） distcp 从目标路径删除没在源路径中出现的任意文件或目录，`-P` 选项意味着文件状态属性如权限、块大小和复本数被保留。当你运行不带参数的 distcp 时，能够看到准确（precise）的使用说明。
+
+如果两个集群运行的是 HDFS 的不兼容（incompatible）版本，你可以将 webhdfs 协议用于它们之间的 distcp：
+
 ```shell
-
+hadoop distcp -update -delete -p webhdfs://namenode1:50070/src webhdfs://namenode2:50070/back-src
 ```
-```shell
+另一个变种是使用 HttpFS 代理作为 distcp 源或目标（有一次使用了 webhdfs协议），这样具有设置防火墙策略和控制带宽策略的优点。
 
-```
+**保证 HDFS 集群的均衡**
 
+向 HDFS 复制数据时，考虑集群的均衡性是相当重要的。当文件块在集群中均匀分布时，HDFS 能达到最佳工作状态，因此要想确保 distcp 不会破坏这点：
 
+1. 最好首先使用默认的每个节点 20 个 map 来运行 distcp 命令
+2. 或者以使用均衡器（balancer）工具进而改善集群中块分布的均匀程度
 
+## 第4章 关于 YARN
+
+p101
 
 
 
