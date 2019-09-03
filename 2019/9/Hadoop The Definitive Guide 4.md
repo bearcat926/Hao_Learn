@@ -1337,4 +1337,134 @@ DistributedFileSystem 类调用 open()方法会返回一个 FSDataInputStream �
 
 ![1567408487422](E:\git_repo\Hao_Learn\2019\9\img\1567408487422.png)
 
-客户端通过在 DistributedFileSystem 对象中调用 create() 来新建文件。DistributedFileSystem 对 namenode 创建一个 RPC 调用，在文件系统的命名空间中新建一个文件，此时该文件中还有没相应的数据块。namenode 执行各种不同的检查以确保这个文件不存在以及客户端有新建该文件的权限。如果这些检查均通过，namenode 就会为创建新文件记录一条记录；否则，文件创建失败并向客户端抛出一个 IOException。DistributedFileSystem 向客户端返回一个 FSDataOutputStream 对象
+客户端通过在 DistributedFileSystem 对象中调用 create() 来新建文件。DistributedFileSystem 创建一个 RPC 调用 namenode 在文件系统的命名空间中新建一个文件，此时该还没有数据块与文件进行联系。namenode 执行各种不同的检查以确保这个文件不存在，并且客户端有创建该文件的权限。如果这些检查均通过，namenode 就会为创建新文件记录一条记录；否则，文件创建失败并客户端抛出一个 IOException。DistributedFileSystem 为客户端返回一个 FSDataOutputStream 对象，由此客户端可以开始写入数据。就像读取一样，FSDataOutputStream 封装一个 DFSOutputStream 对象，该对象负责处理 datanode 和 namenode 之间的通信。
+
+如同客户端写入数据，DFSOutputStream 将它分成一个个的数据包，并写入内部队列，称为“数据队列”（data queue）。数据队列被 DataStreamer 消耗，DataStreamer的责任是挑选出一组合适的datanode去存储数据副本 ，并据此来合理的要求 namenode 分配新的数据块。这一组 datanode 组成了一个管线（pipeline），在这里我们假设复本数为 3，所以管线中有 3 个节点。DataStreamer 将数据包流式传输到管线中的第 1 个 datanode，该 datanode 存储数据包并将它发送到管线中的第 2 个 datanode。同样，第 2 个 datanode 存储该数据包并且发送给管线中的第 3 个 （最后一个）datanode。
+
+DFSOutputStream 也维护着一个正在等待被 datanode 确认的数据包内部队列，称为”确认队列“（ack queue）。只有当被管道中所有 datanode 确认后，该数据包才会从确认队列中被删除。
+
+如果在数据被写入时，任何 datanode 发生故障，则以下操作（对客户端写入数据来说是透明的）会被执行。第一，管线被关闭，而且任何在确认队伍中的数据包会被添加到数据队列的前面，以便故障节点下游的 datanode 不会丢失任何数据包。在正常 datanode 中的当前块将被给予一个新的联系 namenode 的身份，以便如果故障 datanode 后来被恢复，可以删除其中的部分块。故障 datanode 被从管线删除，而且一个新的管线被在两个正常 datanode之间构造。剩下的（The remainder of）数据块被写入管线中的正常 datanode 中。namenode 注意到块是复制不足的， 会安排在另一个节点上创建另一个（a further replica）副本。然后后续块被当做正常块对待。
+
+在一个块被写入期间可能会有多个 datanode 同时发生故障，但非常少见。只要写入了 dfs.namenode.replication.min 的复本数（默认为 1），写操作就会成功，而且这个块可以在集群范围内被异步复制，直到达到其目标副本数（dfs.replication 的 默认值为 3）。
+
+客户端完成数据的写入后，会在数据流调用 close() 方法。该操作将剩余的所有数据包写入 datanode 管线，并在联系 namenode 表示文件已完成之前等待确认。namenode 已经知道文件由哪些块组成（因为 DataStreamer 请求数据块分配），所以它在返回成功前只需要等待数据块进行最小量的复制。
+
+###### 一致模型
+
+一致模型（coherency model）为文件系统描述了文件读/写的数据可见性。HDFS 为了性能牺牲了一些 POSIX 要求，因此一些操作与你期望的可能不同。
+
+
+
+新建一个文件之后，它在文件系统命名空间中是可见的，例如：
+
+```Java
+Path p = new Path("p");
+fs.create(p);
+assertThat(fs.exists(p), is(true));
+```
+
+然而，写入文件的任何内容不被保证是可见的，即使数据流已经刷新。所以文件长度显示为 0：
+
+```Java
+Path p = new Path("p");
+OutputStream out = fs.create(p);
+out.write("content".getBytes("UTF-8"));
+out.flush();
+assertThat(fs.getFileStatus(p).getLen(), is(0L));
+```
+
+当超过一个块的数据被写入，第一个数据块对新的 reader 就是可见的。之后的块也不例外。总之，当前正在被写入的块对其他的 reader 不可见。
+
+HDFS 提供了一种强行将所有缓存刷新到 datanode 中的手段，即通过在 FSDataOutputStream 中调用 hflush() 方法。当 hflush() 方法返回成功后，HDFS 能保证文件中写到该点的数据已经到达在写入管线中的所有 datanode 并且对所有新的 reader 均可见：
+
+```Java
+Path p = new Path("p");
+FSDataOutputStream out = fs.create(p);
+out.write("content".getBytes("UTF-8"));
+out.hflush();
+assertThat(fs.getFileStatus(p).getLen(), 
+				is(((long) "content".length())));
+```
+
+注意（Note that），hflush() 并不保证 datanode 已经将数据写到磁盘上，数据只是在 datanode 的内存中（所以如果发生（in the event of ）数据中心断电（outage），数据会丢失）。为了数据写入到磁盘上这个更有力的保证，使用 hsync() 代替。
+
+hsync() 的操作类似于在 POSIX 中的 fsync() 系统调用，该调用提交的是一个关于文件描述符的缓冲数据。例如，利用标准 Java API 数据写入本地文件，在刷新数据流且同步之后我们保证能看到文件内容：
+
+```Java
+FileOutputStream out = new FileOutputStream(localFile);
+out.write("content".getBytes("UTF-8"));
+out.flush(); // flush to operating system
+out.getFD().sync(); // sync to disk
+assertThat(localFile.length(), is(((long) "content".length())));
+```
+
+```Java
+Path p = new Path("p");
+FSDataOutputStream out = fs.create(p);
+out.write("content".getBytes("UTF-8"));
+out.hsync();
+assertThat(fs.getFileStatus(p).getLen(), 
+				is(((long) "content".length())));
+out.close();
+assertThat(fs.delete(p, true), is(true));
+```
+
+在 HDFS 中关闭文件其实也隐含了执行 hflush() 方法：
+
+```Java
+Path p = new Path("p");
+OutputStream out = fs.create(p);
+out.write("content".getBytes("UTF-8"));
+out.close();
+assertThat(fs.getFileStatus(p).getLen(),
+				is(((long)"content".length())));
+```
+
+**对应用设计的重要性**
+
+这个一致模型对你设计应用程序的方式有指示。随着不调用 hflush() 或 hsync() ，如果客户端或系统发生故障，你应该做好准备丢失数据块。对大部分应用程序来说，这是不可接受的，所以你应该在合适的点调用 hflush() 方法，例如在写入一定数量的（a certain number of）记录或字节之后。尽管 hflush() 操作被设计成不过度的使 HDFS 负载，但它有许多额外开销（hsync() 的开销更大），所以在数据鲁棒性（robustness）和吞吐量（throughput）之间就会有权衡。怎样被算作（constitute）一个可以接受的权衡是依赖于应用程序的，通过测量应用程序和不同 hflush() 或 hsync() 调用频率（frequency）所呈现出的性能，最终选择一个合适的值。
+
+#### 3.7 通过 distcp 并行复制
+
+前面着重介绍单线程访问的 HDFS 访问模型。例如，通过指定文件通配符，可以对一组文件进行处理，但是为了提高性能，需要写一个程序来并行处理这些文件。Hadoop 自带一个有用程序 distcp，该程序可以并行从 Hadoop 文件系统中复制大量数据，也可以将大量数据复制到 Hadoop 中。
+
+Distcp 的一种用法是代替 `hadoop fs -cp`。例如，我们可以将文件复制到另一个文件中，也可以复制目录：
+
+```shell
+hadoop distcp file1 file2
+# or
+hadoop distcp dir1 dir2
+```
+
+如果 dir2 不存在，将新建 dir2，目录 dir1 的内容全部复制到 dir2 下。可以指定多个原路径，所有原路径下的内容都将被复制到目标路径下。如果 dir2 已经存在，那么目录 dir1 复制到 dir2 下，形成目录结构 dir2/dir1。
+
+使用 -overwrite 选项可以在保持同样的目录结构的同时强制覆盖原有文件
+
+p99；94
+
+```shell
+
+```
+```shell
+
+```
+```shell
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
