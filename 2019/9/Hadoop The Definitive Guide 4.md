@@ -1531,31 +1531,37 @@ YARN 应用的生命期差异性很大：有几秒的短期应用，也有连续
 
 #### 4.2 YARN 与 MapReduce 1 相比
 
-有时用 MapReduce 1 来指代 Hadoop 初始版本中的 MapReduce 分布式框架，以区别于使用了 YARN 的 MapReduce 2。
+MapReduce 在Hadoop的初始版本中的分布式实现有时被描述为`MapReduce 1` ，以区分（distinguish）使用了 YARN 的 MapReduce 2。
 
 新旧版本 MapReduce API 之间的区别在于不同于 MapReduce 1/2 执行框架的区别。API 具有面向用户的、客户端的特性，并且决定着用户怎样写 MapReduce 程序；而执行机制只是运行 MapReduce 程序的不同途径而已。新旧版本 API 在 MapReduce 1/2 运行的四种组合都是支持的。
 
-MapReduce 1 中，有两类守护进程控制着作业执行过程：一个 jobtracker 及一个或多个 tasktracker。jobtracker 通过调度 tasktracker 上运行的任务来协调所有运行在系统上的作业。
+在 MapReduce 1 中，有两类守护进程控制着作业执行过程：一个 jobtracker 及一个或多个 tasktracker。jobtracker 通过安排（schedule）tasktracker 上运行的任务协调所有运行在系统上的作业。tasktracker 在运行任务的同时将运行进度报告发送给 jobtracker，jobtracker 由此记录每项作业任务的整体进度情况。如果其中一个任务失败，jobtracker 可以在另一个 tasktracker 节点上重新安排（reschedule）该任务。
 
-p105
+MapReduce 1 中，jobtracker 关心作业安排（将任务与 tasktracker 匹配）和任务进度监控（保持跟踪任务、重启失败或迟缓的任务；记录任务记账（bookkeeping），如维护计数器的计数）。相比之下（By contrast），在YARN 中，这些责任是由独立的（separate）实体处理的：资源管理器和 application master（每个 MapReduce 作业有一个）。虽然为了卸下 jobtracker 的负载而运行一个作为独立守护线程的作业历史服务器是便捷的，但关于存储已完成作业的历史，jobtracker 也是有责任的。在 YARN 中，相等的（equivalent）角色是存储应用历史的时间线服务器（timeline）。
 
+**Tip**：在 Hadoop 2.5.1 中，timeline依旧不存储 MapReduce 作业历史，仍需要
+MapReduce 作业历史服务器守护线程。
 
+在 YARN 中与 tasktracker 的相等的角色是节点管理器。映射关系被下表总结：
 
+![1567602708294](E:\git_repo\Hao_Learn\2019\9\img\1567602708294.png)
 
+###### 可扩展性（Scalability）
 
+YARN 能在比 MapReduce 1 更的集群上运行。MapReduce 1 在4000节点和40000任务的区域中触及了可扩展性的阻碍，这个阻碍阻止（stem）了jobtracker 管理全部的作业和任务的事实。YARN 
+通过分隔资源管理器和 application master 结构（architecture）优点（virtue）克服了这个限制：它被设计成扩展上限为10000节点和100000任务。
 
+jobtracker正相反（In contrast），application 的每一个实例（这里指一个 MapReduce 作业）都有一个专用的（dedicated）application master ，该master 在 application 的持续时间内运行。这个模型实际上更为接近初始的 Google MapReduce 论文，论文中描述了如何启动一个 master 进程以协调运行在一系列工作（worker）上的 map 和 reduce 任务。
 
+###### 可用性（Availability）
 
+当服务守护进程失败时，通过为另一个守护进程复制接管工作所需的状态以便其继续提供服务，从而可以获得高可用性（High Availability，HA）。然而，jobtracker 内存中大量快速变化的复杂状态（例如，每个人物状态每几秒会更新一次）使得改进 jobtracker 服务获得高可用性非常困难。
 
+YARN 策略：先为资源管理器提供高可用性，再为 YARN 应用（针对每个应用）提供高可用性。实际上，对于资源管理器和 application master，Hadoop 2 都支持 MapReduce 作业的高可用性。
 
+###### 利用率（Utilization）
 
-
-
-
-
-
-
-
+p107;102
 
 
 
