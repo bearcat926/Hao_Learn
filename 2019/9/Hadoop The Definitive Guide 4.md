@@ -1527,9 +1527,17 @@ YARN 应用的生命期差异性很大：有几秒的短期应用，也有连续
 
 ###### 构建 YARN 应用
 
+从无到有编写一个 YARN 应用是一件相当复杂的事，但在很多情况下不必这样。有很多现成的应用，在符合要求的情况下通常可以直接使用。
 
+#### 4.2 YARN 与 MapReduce 1 相比
 
+有时用 MapReduce 1 来指代 Hadoop 初始版本中的 MapReduce 分布式框架，以区别于使用了 YARN 的 MapReduce 2。
 
+新旧版本 MapReduce API 之间的区别在于不同于 MapReduce 1/2 执行框架的区别。API 具有面向用户的、客户端的特性，并且决定着用户怎样写 MapReduce 程序；而执行机制只是运行 MapReduce 程序的不同途径而已。新旧版本 API 在 MapReduce 1/2 运行的四种组合都是支持的。
+
+MapReduce 1 中，有两类守护进程控制着作业执行过程：一个 jobtracker 及一个或多个 tasktracker。jobtracker 通过调度 tasktracker 上运行的任务来协调所有运行在系统上的作业。
+
+p105
 
 
 
