@@ -13,3 +13,8 @@
 - 【3小时】 阅读耒阳积分商城旧版源码并描绘 IntegrationAnalyze 流程图
 - 【5小时】 完成 IntegrationAnalyze 流程图
 
+9-5
+
+- 【3小时】 阅读耒阳积分商城旧版源码；学习Hadoop
+- 【5小时】 
+

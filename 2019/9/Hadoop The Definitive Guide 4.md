@@ -1561,7 +1561,221 @@ YARN 策略：先为资源管理器提供高可用性，再为 YARN 应用（针
 
 ###### 利用率（Utilization）
 
-p107;102
+在 MapReduce 1 中，每个 tasktracker 都配置有若干固定长度的slot，这些 slot 是静态分配的，在配置的时候就被划分为 map slot 和 reduce slot。一个 slot 仅能同于运行一个任务。
+
+在 YARN 中，一个节点管理器管理一个资源池，而不是指定的固定数目的 slot。YARN 上运行的 MapReduce 不会出现由于集群中仅有 map slot 可用导致 reduce 任务必须等待的情况，而 MapReduce 1 则会有这样的问题。如果能够获得运行任务的资源，那么应用就会正常进行。
+
+更进一步，YARN 中的资源时精细化管理的，这样一个应用能够按需请求资源，而不是请求一个不可分割的、对于特定任务而要可能会太大（浪费资源）或太小（可能会导致失败）的 slot。
+
+###### 多租户（Multitenancy）
+
+YRAN向 MapReduce 以外的其他类型的分布式应用开放了 Hadoop。用户甚至可以在同一个 YARN 集群上运行不同版本的 MapReduce，这使得升级 MapReduce 的过程更好管理。
+
+#### 4.3 YARN 的调度
+
+YARN 调度器的工作就是根据既定策略为应用分配资源。
+
+###### 调度选项
+
+YARN 中有三种可用的调度器：FIFO调度器（FIFO Scheduler），容量调度器（Capacity Scheduler），公平调度器（Fair Scheduler）。
+
+FIFO 调度器：将应用放置在一个队列中，然后按照提交的顺序（先进先出）运行应用。优点是简单易懂，不需要任何配置，但不适合共享集群。
+
+在一个共享集群中，更适合使用容量调度器或公平调度器。这两种调度器都允许长时间运行的作业能及时完成。这两种调度器都允许长时间运行的作业能及时完成，也允许正在进行较小临时查询的用户能够在合理时间内得到返回结果。
+
+![1567665984225](E:\git_repo\Hao_Learn\2019\9\img\1567665984225.png)
+
+FIFO 调度器：后启动的小作业一直被阻塞，直至大作业完成。
+
+容量调度器：一个独立的（separate）专用（dedicated）队列保证小作业一提交就可以启动。该策略牺牲了整个集群的利用率，即大作业的执行时间会比 FIFO 长。
+
+公平调度器：在所有运行的作业之间动态平衡资源。但是在第二个作业启动到获得公平共享资源之间会有时间滞后（lag），因为它必须等待第一个作业使用的容器完全的（complete）释放资源。最终效果是：既得到了较高的集群利用率，又能保证小作业及时完成。
+
+###### 容量调度器配置
+
+Hadoop集群 -> 组织（一对多），组织分配到全部集群资源的一部分。
+组织 -> 专门队列（一对一），队列使用一定的集群资源。
+每个组织的不同用户能够共享该组织队列所分配的资源。
+在一个队列内，使用 FIFO 调度策略对应用进行调度。
+
+单个作业使用的资源不会超过其队列内容。
+
+弹性队列（queue elasticity）：如果仍有可用的空闲资源，容量调度器可能会将空余的资源分配给队列中的作业。
+
+缓解队列间抢占资源的方法是为队列设置一个最大容量限制。当然，这样做是以牺牲队列弹性为代价的，因此需要在不断尝试和失败中找到一个合理的折中。
+
+范例 4-1.容量调度器的基本配置文件
+
+```xml
+<?xml version="1.0"?>
+<configuration>
+    <property>
+        <name>yarn.scheduler.capacity.root.queues</name>
+        <value>prod,dev</value>
+    </property>
+    <property>
+        <name>yarn.scheduler.capacity.root.dev.queues</name>
+        <value>eng,science</value>
+    </property>
+    <property>
+        <name>yarn.scheduler.capacity.root.prod.capacity</name>
+        <value>40</value>
+    </property>
+    <property>
+        <name>yarn.scheduler.capacity.root.dev.capacity</name>
+        <value>60</value>
+    </property>
+    <property>
+        <name>yarn.scheduler.capacity.root.dev.maximum-capacity</name>
+        <value>75</value>
+    </property>
+    <property>
+        <name>yarn.scheduler.capacity.root.dev.eng.capacity</name>
+        <value>50</value>
+    </property>
+    <property>
+        <name>yarn.scheduler.capacity.root.dev.science.capacity</name>
+        <value>50</value>
+    </property>
+</configuration>
+```
+
+由于 dev 队列的最大容量被设置为 75%，因此即使 prod 队列空闲，dev 也不会占用全部集群资源。由于没有对其他队列设置最大容量限制，eng 或 science 中的作业可能会占用 dev 队列的所有容量，而 prod 队列实际则可能会占用全部集群资源。
+
+**队列放置**
+
+将应用放置在哪个队列中，取决于应用本身。例如，在 MapReduce 中，可以通过设置属性 mapreduce.job.queuename 来指定要用的队列。如果队列不存在，则在提交时会发送错误。如果不指定队列，那么应用将被放在一个名为 default 的默认队列中。
+
+**Tip**：对于容量调度器，队列名应该是层次结构名的最后一部分，因为全部的层次结构名是不能被识别的。例如，对于上述配置范例，prod 和 eng 是合法的队列名，但 root.dev.eng 和 dev.eng 作为队列名是无效的。
+
+###### 公平调度器配置
+
+公平调度器旨在为所有运行的应用公平分配资源。
+
+![1567671792914](E:\git_repo\Hao_Learn\2019\9\img\1567671792914.png)
+
+1. 启用公平调度器
+
+默认是使用容量调度器（尽管在一些 Hadoop 分布式项目，如 CDH 中，默认使用公平调度器），如果要使用公平调度器，需要将`yarn-site.xml`文件中的`yarn.resourcemanager.scheduler.class`设置为公平调度器的完全限定名：`org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.FairScheduler`
+
+2. 队列配置
+
+通过一个名为 fair-scheduler.xml  的分配文件对公平调度器进行配置，该文件位于类路径下（可以通过设置属性 `yarn.scheduler.fair.allocation.file`来修改文件名）。当没有该分配文件时，公平调度器的工作策略同先前所描述的一样：每个应用放置在一个以用户名命名的队列中，队列是在用户提交第一个应用是动态创建的。
+
+通过分配文件可以为每个队列进行配置。这样允许对容量调度器支持的层次队列进行配置。
+
+范例 4-2.公平调度器的分配文件：
+
+```xml
+<?xml version="1.0"?>
+<allocations>
+    <defaultQueueSchedulingPolicy>fair</defaultQueueSchedulingPolicy>
+    <queue name="prod">
+        <weight>40</weight>
+        <schedulingPolicy>fifo</schedulingPolicy>
+    </queue>
+    <queue name="dev">
+        <weight>60</weight>
+        <queue name="eng" />
+        <queue name="science" />
+    </queue>
+    <queuePlacementPolicy>
+        <rule name="specified" create="false" />
+        <rule name="primaryGroup" create="false" />
+        <rule name="default" queue="dev.eng" />
+    </queuePlacementPolicy>
+</allocations>
+
+```
+
+队列的层次使用嵌套 queue 元素来定义。所有的队列都是 root 队列的孩子，即使实际上并没有嵌套进 root queue 元素里。
+
+队列中有权重元素，用于公平共享计算。集群认为按照权重比例分配是公平的，否则会按平均分配。权重并不是百分百，若用 2：3 代替例子中的 40：60，效果是一样的。
+
+**Tip**：当设置权重时，要考虑默认队列和动态创建的队列（例如以用户名命名的队列）。虽然没有在分配文件中为它们指定权重，但它们仍有值为 1 的权重。
+
+每个队列可以有不同的调度策略。队列的默认调度策略可以通过顶层元素 defaultQueueSchedulingPolicy 进行设置，如果省略，默认使用公平调度。
+
+使用 schedulingPolicy 可以给队列设置指定的策略。在上述例子中，由于希望每个生产性作业能够按顺序运行且在最短可能的时间内结束，所以 prod 队列使用了 FIFO 调度策略。
+
+每个队列可配置最大/最小资源数量及最大可运行的应用数量。其中，最小资源数不是一个硬性的限制，但是调度器常用它对资源分配进行有限排序。即如果两个队列的资源都低它们的公平共享额度，那么最远低于最小资源数量的那个队列优先被分配资源。
+
+3. 队列放置
+
+公平调度器使用一个基于规则的系统来确定应用应该放到哪个队列。在范例 4-2 中，queuePlacementPolicy 元素包含了一个规则列表，每条规则会被依次尝试直到匹配成功。
+
+specified 表示把应用放进所指明的队列中，没有则不匹配。
+primaryGroup 会试着把应用放在以用户的主 Unix 组名命名的队列中，没有则不匹配。
+default 是一条底线，之前的规则都不匹配时启用，把应用放进指定的队列中。
+
+忽略 queuePlacementPolicy 元素时的默认队列放置为：
+
+```xml
+<queuePlacementPolicy>
+	<rule name="specified" />
+	<rule name="user" />
+</queuePlacementPolicy>
+```
+
+换言之，除非明确定义队列，否则必要时会以用户名为队列名创建队列。
+
+另一个简单的队列放置策略是将所有应用放进 default 中，这样可以在应用间公平共享资源，而不是在用户之间共享。这等价于：
+
+```xml
+<queuePlacementPolicy>
+	<rule name="default" />
+</queuePlacementPolicy>
+```
+
+通过将属性 yarn.scheduler.fair.user-as-default-queue 设置为 false 也可以做到上述策略的效果，而且不需要使用分配文件。另外，将 yarn.scheduler.fair.user-as-default-queue 设置为 false，用户便不能随意创建队列了。
+
+4. 抢占
+
+由于新提交给空队列的作业需要等集群上已经运行的作业释放资源之后才会启动，所以公平调度器提供了抢占（preemption）功能，用于预测作业从提交到执行所需的时间。
+
+所谓抢占，就是允许调度器终止那些占用资源超过了其公平共享份额的队列的容器，这些容器资源释放后可以分配给资源数量低于应得份额的队列。注意，抢占会降低整个集群的效率，因为被终止的 containers 需要重新执行。
+
+通过将 yarn.scheduler.fair.preemption 设置为 true，可以全面启用抢占功能。有两个相关的抢占超时设置：一个用于最小共享（minimum share preempted timeout），另一个用于公平共享（fair share preempted timeout），两者设定时间均为秒级。默认情况下，两个超时参数均不设置，但为了允许抢占，至少要设置其中一个。
+
+如果队列在 minimum share preempted timeout 指定的时间内未获得被承诺的最小共享资源，调度器就会抢占其他容器。可以通过分配文件中的顶层元素 defaultMinSharePreemptionTimeout 为所有队列设置默认的超时时间，还可以通过设置每个队列的 minSharePreemptionTimeout 元素来为单个队列设置指定超时时间。
+
+如果队列在 fair share preempted timeout 指定的时间内获得的资源仍然低于其公平共享份额的一半，那么调度器就会抢占其他容器。可以通过分配文件中的顶层元素defaultFairSharePreemptionTimeout 为所有队列设置默认的超时时间，还可以通过设置每个队列的 fairSharePreemptionTimeout 元素来为单个队列指定超时时间。
+
+通过设置 defaultFairSharePreemptionThreshold 和 fairSharePreemptionThreshold 可以修改超时阈值，默认值是0.5。
+
+###### 延迟调度
+
+所有的 YARN 调度器都试图以本地请求为重。在一个繁忙的集群上，如果一个应用请求某个节点，那么极有可能此时有其他容器正在该节点上运行。最明显的做法是立即放宽本地要求，在同一 rack 上分配一个容器。然而，通过实践发现，等待很短的时间（不超过几秒），可以显著的增加在请求节点上分配容器的机会，从而提高集群的效率。这个特性称之为延迟调度（delay scheduling）。容器调度器和公平调度器都支持延迟调度。
+
+YARN 中每个节点管理器周期性的（默认每秒一次）向资源管理器发送心跳请求。心跳中携带了节点管理器中正运行的容器、新容器可用的资源等信息，所以对于一个应用运行一个容器而言，每个心跳就是一个潜在的（potential ）调度机会（scheduling opportunity）。
+
+当使用延迟调度时，调度器不会简单的使用它收到的第一个调度机会，而是在放宽本地限制并接受下一个调度机会之前，等待指定的最大数目的调度机会发生。
+
+对于容量调度器，可以设置 yarn.scheduler.capacity.node-locality-delay 来配置延迟调度。设置为正整数，表示调度器在放宽节点限制、改为匹配同一 rack 上的其他节点前，准备错过的调度机会的数量。
+
+公平调度器也使用调度机会的数量来决定延迟时间，尽管它表示为集群大小的比例。例如将  yarn.scheduler.fair.locality.threshold.node 设置为 0.5，表示调度器在接受同一机架中的其他节点之前，将一直等待直到集群中的一半节点都已经给过调度机会。而 yarn.scheduler.fair.locality.threshold.rack 表示在接受另一个机架替代所申请的机架之前需要等待的时长阈值。
+
+###### 主导资源公平性
+
+117;111
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
