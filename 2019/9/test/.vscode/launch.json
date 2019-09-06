@@ -2,6 +2,13 @@
     "configurations": [
         {
             "type": "java",
+            "name": "CodeLens (Launch) - Problem2",
+            "request": "launch",
+            "mainClass": "offer.Problem2",
+            "projectName": "test_b5961f67"
+        },
+        {
+            "type": "java",
             "name": "CodeLens (Launch) - ArrayListFailFast",
             "request": "launch",
             "mainClass": "ArrayListFailFast"

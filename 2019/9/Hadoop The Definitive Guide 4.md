@@ -1604,7 +1604,7 @@ Hadoop集群 -> 组织（一对多），组织分配到全部集群资源的一�
 
 缓解队列间抢占资源的方法是为队列设置一个最大容量限制。当然，这样做是以牺牲队列弹性为代价的，因此需要在不断尝试和失败中找到一个合理的折中。
 
-范例 4-1.容量调度器的基本配置文件
+范例 4-1.容量调度器的基本配置文件 capacity-scheduler.xml
 
 ```xml
 <?xml version="1.0"?>
@@ -1757,7 +1757,17 @@ YARN 中每个节点管理器周期性的（默认每秒一次）向资源管理
 
 ###### 主导资源公平性
 
-117;111
+YARN 中调度器解决多种资源调度问题的思路是，观察每个用户的主导资源。并将其作为对集群资源使用的一个度量，即“主导资源公平性”（Dominant Resource Fairness，DRF）。
+
+应用请求的每份容器资源占据对应集群总资源的比值决定了应用的主导资源。
+
+应用之间的主导资源比值决定了它们在公平调度下获得的容器数比值。
+
+默认情况下不用DRF，因此在资源计算期间，只需考虑内存，不需考虑CPU。将 capacity-scheduler.xml 文件中的`org.apache.hadoop.yarn.util.resource.DominantResourceCalculator`设为`yarn.scheduler.capacity.resource-calculator`即可在容器调度器中使用 DRF；将分配文件中的顶层元素 defaultQueueSchedulingPolicy 设为 drf 即可在公平调度器中使用 DRF。
+
+## 第5章 Hadoop 的 I/O 操作
+
+#### 5.1 数据完整性
 
 
 
@@ -1777,5 +1787,4 @@ YARN 中每个节点管理器周期性的（默认每秒一次）向资源管理
 
 
 
-
-
+ 
