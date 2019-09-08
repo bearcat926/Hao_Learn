@@ -37,7 +37,7 @@ class Solution5 {
         int length = charArray.length;
         // 清空StringBuffer
         str = new StringBuffer();
-        for (int i = 0, j = 0; i < length; i++) {
+        for (int i = 0; i < length; i++) {
             // 空格赋值
             if (charArray[i] == ' ') {
                 str.append("%20");
@@ -48,17 +48,17 @@ class Solution5 {
         return str.toString();
     }
 
-    private static Object resizeArray(Object oldArray, int newSize) {
-        // 获取旧长度
-        int oldSize = java.lang.reflect.Array.getLength(oldArray);
-        Class elementType = oldArray.getClass().getComponentType();
+    // private static Object resizeArray(Object oldArray, int newSize) {
+    //     // 获取旧长度
+    //     int oldSize = java.lang.reflect.Array.getLength(oldArray);
+    //     Class elementType = oldArray.getClass().getComponentType();
 
-        Object newArray = java.lang.reflect.Array.newInstance(elementType, newSize);
-        int preserveLength = Math.min(oldSize, newSize);
-        if (preserveLength > 0)
-            System.arraycopy(oldArray, 0, newArray, 0, preserveLength);
-        return newArray;
-    }
+    //     Object newArray = java.lang.reflect.Array.newInstance(elementType, newSize);
+    //     int preserveLength = Math.min(oldSize, newSize);
+    //     if (preserveLength > 0)
+    //         System.arraycopy(oldArray, 0, newArray, 0, preserveLength);
+    //     return newArray;
+    // }
 
     public static String replaceSpaces2(StringBuffer str) {
         char[] charArray = str.toString().toCharArray();
