@@ -2,6 +2,20 @@
     "configurations": [
 		{
 			"type": "java",
+			"name": "CodeLens (Launch) - Solution13",
+			"request": "launch",
+			"mainClass": "Solution13",
+			"projectName": "offer_fce79a27"
+		},
+		{
+			"type": "java",
+			"name": "CodeLens (Launch) - Solution12",
+			"request": "launch",
+			"mainClass": "Solution12",
+			"projectName": "offer_fce79a27"
+		},
+		{
+			"type": "java",
 			"name": "CodeLens (Launch) - Solution11",
 			"request": "launch",
 			"mainClass": "Solution11",
