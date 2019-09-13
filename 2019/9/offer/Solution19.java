@@ -39,6 +39,8 @@ class Solution19 {
 	// 判断下一个匹配模式是否是 '*'
 	if (y + 1 < pLength && pc[y + 1] == '*') {
 	    // 判断 0次 和 1次 两种情况。其中，判断 1次 时，要检测对当前字符的判断结果
+	    // 0次：模式字符跳到 '*' 后，y = y + 2
+	    // 1次：尝试使用 '*' 匹配下一字符，x = x + 1
 	    return matchCoreByDP(x, y + 2) || currMatch && matchCoreByDP(x + 1, y);
 	} else {
 	    // 检测的对第一个字符的判断结果.通过则继续下一字符的判断
@@ -53,8 +55,8 @@ class Solution19 {
         String s = "aa";
         String p = "a*";
         long startTime = System.nanoTime();
-		boolean flag = isMatch(s, p);
-		long endTime = System.nanoTime();
+	boolean flag = isMatch(s, p);
+	long endTime = System.nanoTime();
         System.out.println("time：" + (endTime - startTime));
         System.out.println(flag);
     }
