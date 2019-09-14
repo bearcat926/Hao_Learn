@@ -19,8 +19,9 @@
     boolean firstPoint = false;
     boolean firstEOre = false;
     int length;
+    
     public static boolean isNumber(String s) {
-        if (s == null || s == "") {
+        if (s == null || "".equals(s)) {
             return false;
         }
         char[] sc = s.toCharArray();
@@ -34,36 +35,54 @@
         if (sc[0] == ' ') sc[0] = '0';
 
         for (int i = 0; i < length; i++) {
-            if(sc[i] >= '0' && sc[i] <= '9');
-            else if (sc[i] == 'e' || sc[i] == 'E') { // 1.判断 e Or E
-                if(!firstEOre){ // 第一次出现 e Or E
+            if (isNumber0To9(sc, i)) {
+                
+            } else if (sc[i] == 'e' || sc[i] == 'E') { // 1.判断 e Or E
+                if (!firstEOre) { // 第一次出现 e Or E
                     // 首位出现
-                    if (i == 0) return false; 
+                    if (i == 0) return false;
                     firstEOre = true;
-                } else if(firstEOre) { // 重复出现 e Or E
+                } else if (firstEOre) {
+                    return false;
+                }
+                if (i + 1 == length || (sc[0] == '.' && i == 1)) { 
+                    // 重复出现 e Or E , e Or E是末尾, 首位'.'接 e Or E
                     return false;   
                 }
-                // e Or E是末尾
-                if (i + 1 == length) {
-                    return false;
-                }
-                
             } else if (sc[i] == '.') { // 2.判断 '.'
-                if (firstEOre) { // '.'在 e Or E之后
+                if (firstEOre) {
+                    // e Or E后不能有 '.'
                     return false;
-                } else if(!firstPoint){ //第一次 '.'
+                } else if (!firstPoint) { //第一次 '.'
                     // 只有一个点
                     if (length == 1) return false; 
                     firstPoint = true;
-                }else if(firstPoint){ //重复 '.'
+                } else if (firstPoint) { //重复 '.'
                     return false;
+                } 
+                
+                if (i != 0 && !isNumber0To9(sc, i - 1)) {
+                    if (i + 1 == length) return false;
+                    else if(!isNumber0To9(sc, i + 1)) return false;
+                } 
+            } else if (sc[i] == '+' || sc[i] == '-' ) { // 3.判断 +、-
+                // 首位，length = 1
+                if (i == 0 && length == 1) {
+                    return false;
+                } else if (i != 0 && !firstEOre) {
+                // 非首位，前面需要有 e Or E
+                    return false;
+                } else if (length == i + 1 ) {
+                // 不在末尾，length != i + 1
                 }
-            } else if (sc[i] == '+' || sc[i] == '-' && i + 1 == length) { // 3.+、- 在末尾
-                return false;
             } else { // 其他字符
                 return false;
             }
         }
         return true;
+    }
+    
+    public static boolean isNumber0To9(char[] sc, int n){
+        return sc[n] >= '0' && sc[n] <= '9';
     }
 }
