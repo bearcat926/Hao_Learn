@@ -7,11 +7,11 @@
  */
 class Solution19 {
 
-    int sLength, pLength;
-    char[] sc, pc;
-    boolean[][] f ;
+    static int sLength, pLength;
+    static char[] sc, pc;
+    static boolean[][] f ;
 	
-    public boolean isMatch(String s, String p) {
+    public static boolean isMatch(String s, String p) {
 	// 非空检测
 	if (s == null || p == null) {
 	    return false;
@@ -27,7 +27,7 @@ class Solution19 {
 	return matchCoreByDP(0, 0);  
     }
 
-    public boolean matchCoreByDP(int x, int y) {
+    public static boolean matchCoreByDP(int x, int y) {
         // 两个长度都相同则返回；也可以防止 `.` or `.*` 模式对空字符串的不匹配情况
 	if (y == pLength) {
 	    return x == sLength;
@@ -48,8 +48,6 @@ class Solution19 {
 	}
 
     }
-
-
 
     public static void main(String[] args) {
         String s = "aa";

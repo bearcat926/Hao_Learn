@@ -16,9 +16,9 @@
  */
  
  class Solution20 {
-    boolean firstPoint = false;
-    boolean firstEOre = false;
-    int length;
+    static boolean firstPoint = false;
+    static boolean firstEOre = false;
+    static int length;
     
     public static boolean isNumber(String s) {
         if (s == null || "".equals(s)) {
