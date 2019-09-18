@@ -12,7 +12,12 @@ class ListNode23 {
 }
 
 /**
- * second 只能超过 first 一圈，当 first 走的步数为偶数时可以相遇
+ * l1 = x + y;
+ * l2 = 2l1 = 2*(x + y) = x + n*(y + z) + y;
+ * so
+ * x + y = n*(y + z)
+ * x = (n - 1)*(y + z) + z
+ * 根据这个等式相遇之后，若first从节点a单步移动到节点b所需的步数，就等于second从节点c单步移动到节点b所需的步数(可能会转n-1圈)
  */
 class Solution23 {
     public static ListNode23 entryNodeOfLoop(ListNode23 head) {
