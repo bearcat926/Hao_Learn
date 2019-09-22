@@ -36,7 +36,7 @@ class Solution18 {
             while (q != null && p.next.val == q.val) 
                 q = q.next;
 
-            // 未重复，则移动到下一节点，也能防止初始位置的重复链表
+            // 未重复，则移动到下一节点
             if (p.next.next == q) 
                 p = p.next;
             else // 重复，则删除对中间重复的链表的引用
