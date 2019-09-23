@@ -1,10 +1,4 @@
-// 判断带头结点的循环双链表是否对称
-
-// p,q双指针，从两个方向出发
-// 当时是奇数时，两指针相等，p=q
-// 偶数时，p->pr
-
-// 判断B是否是A的连续子序列
+// 非循环双链表根据Locate(L, x)将值为x的节点的freq加一，并按照freq递减排序，freq相同的节点按照最近访问排序
 #include <iostream>
 using namespace std;
 struct DLinkList
