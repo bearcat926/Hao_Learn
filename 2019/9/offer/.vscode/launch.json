@@ -2,6 +2,27 @@
     "configurations": [
 		{
 			"type": "java",
+			"name": "CodeLens (Launch) - Solution41",
+			"request": "launch",
+			"mainClass": "Solution41",
+			"projectName": "offer_fce79a27"
+		},
+		{
+			"type": "java",
+			"name": "CodeLens (Launch) - Solution40",
+			"request": "launch",
+			"mainClass": "Solution40",
+			"projectName": "offer_fce79a27"
+		},
+		{
+			"type": "java",
+			"name": "CodeLens (Launch) - Solution35",
+			"request": "launch",
+			"mainClass": "Solution35",
+			"projectName": "offer_fce79a27"
+		},
+		{
+			"type": "java",
 			"name": "CodeLens (Launch) - Solution30",
 			"request": "launch",
 			"mainClass": "Solution30",

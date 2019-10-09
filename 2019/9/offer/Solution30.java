@@ -161,20 +161,15 @@ class MinStack2 {
 
 	public void push(int x) {
 		top.pushToTop(x);
-		if(!min.isEmpty()){
-    		if(min.peekFromTop() >= x){
-    		    min.pushToTop(x);
-    		}
-		}else{
-		    min.pushToTop(x);
-		}
+		if(!min.isEmpty())
+			if(min.peekFromTop() >= x) 
+				min.pushToTop(x);
+		else min.pushToTop(x);
 	}
 
 	public int pop() {
 		int val = top.popFromTop();
-	    if(min.peekFromTop() == val){
-		    min.popFromTop();
-		}
+	    if(min.peekFromTop() == val) min.popFromTop();
 		return val;
 	}
 

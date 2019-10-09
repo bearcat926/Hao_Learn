@@ -1,0 +1,13 @@
+{
+	"files.associations": {
+		"vector": "cpp",
+		"iostream": "cpp",
+		"ostream": "cpp",
+		"*.tcc": "cpp",
+		"deque": "cpp",
+		"string": "cpp",
+		"unordered_map": "cpp",
+		"algorithm": "cpp",
+		"sstream": "cpp"
+	}
+}

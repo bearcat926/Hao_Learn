@@ -15,7 +15,7 @@ class TreeNode {
 class Solution7 {
 
 	public static TreeNode buildTree(int[] preorder, int[] inorder) {
-		// 非空监测
+		// 非空检测
 		if (preorder == null || preorder.length == 0 || inorder == null || inorder.length == 0)
 			return null;
 		return buildTree(preorder, inorder, 0, preorder.length - 1, 0, inorder.length - 1);
