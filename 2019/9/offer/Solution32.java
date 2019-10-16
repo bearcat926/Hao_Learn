@@ -14,6 +14,7 @@ class TreeNode32 {
 }
 
 class Solution32 {
+	// 广度优先遍历
     public List<Integer> printFromTopToBottom(TreeNode32 root) {
 		List<Integer> list = new ArrayList<>();
 		if(root == null) return list;

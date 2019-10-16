@@ -14,6 +14,7 @@ class TreeNode33 {
 }
 
 class Solution33 {
+	// 广度优先遍历，加分层
     public List<List<Integer>> printFromTopToBottom(TreeNode33 root) {
 		List<List<Integer>> list = new ArrayList<>();
 		if(root == null) return list;

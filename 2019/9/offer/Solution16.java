@@ -49,7 +49,9 @@ class Solution16 {
                 return true;
 
         return false;
-    }
+	}
+	
+	// 可以使用快速幂
 
     public static void main(String[] args) {
         long startTime = System.nanoTime();
