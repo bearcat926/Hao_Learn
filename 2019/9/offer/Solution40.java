@@ -55,13 +55,13 @@ class Solution40 {
 	public static void quickSort(int[] nums, int start, int end){
 		if(start > end) return; 
 
-		int p = patition(nums, start,end);
+		int p = partition(nums, start,end);
 
 		quickSort(nums, start, p - 1);
 		quickSort(nums, p + 1, end);
 	}
 
-	public static int patition(int[] nums, int start, int end){
+	public static int partition(int[] nums, int start, int end){
 		int p = nums[start];
 
 		while(start < end){

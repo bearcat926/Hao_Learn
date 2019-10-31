@@ -19,7 +19,7 @@ using namespace std;
 class Solution42 {
 	
 public:
-	int patition(vector<int> &input, int start, int end)
+	int partition(vector<int> &input, int start, int end)
 	{
 		int p = input[start];
 
@@ -37,7 +37,7 @@ public:
 	void quickSort1(vector<int> &input, int start, int end)
 	{
 		if(start > end) return; 
-		int p = patition(input, start, end);
+		int p = partition(input, start, end);
 		quickSort1(input, start, p - 1);
 		quickSort1(input, p + 1, end);
 	}
