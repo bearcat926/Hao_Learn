@@ -278,13 +278,13 @@ RPC 服务集群的注册中心与服务提供方、消费方之间，消息服�
      - or 的查询尽量用 union 代替 （InnoDB）；
      - 复合索引高选择性的字段排在前面；
      - order by / group by 字段包括在索引当中减少排序，效率会更高。
-   >- 尽量规避大事务的 SQL，大事务的 SQL 会影响数据库的并发性能及主从同步；
-   - 分页语句 limit 的问题；
-   - 删除表所有记录请用 truncate，不要用 delete；
-   - 不让 mysql 干多余的事情，如计算；
-   - 输写 SQL 带字段，以防止后面表变更带来的问题，性能也是比较优的 ( 涉及到数据字典解析，请自行查询资料)；
-   - 在 Innodb上用 select count( * )，因为 InnoDB 会存储统计信息；
-   - 慎用 Order by rand()。
+   >     - 尽量规避大事务的 SQL，大事务的 SQL 会影响数据库的并发性能及主从同步；
+     - 分页语句 limit 的问题；
+     - 删除表所有记录请用 truncate，不要用 delete；
+     - 不让 mysql 干多余的事情，如计算；
+     - 输写 SQL 带字段，以防止后面表变更带来的问题，性能也是比较优的 ( 涉及到数据字典解析，请自行查询资料)；
+     - 在 Innodb上用 select count( * )，因为 InnoDB 会存储统计信息；
+     - 慎用 Order by rand()。
 >2. 锁
 >3. 业务实例相互干绕对 IO/CPU 资源争用
 >4. 服务器硬件
@@ -295,7 +295,7 @@ RPC 服务集群的注册中心与服务提供方、消费方之间，消息服�
 
 在双十一的场景里，应用服务器的全链路上不论是连接池的峰值处理，还是应用之间的调用频率，都会有相关的限流措施和降级预案。
 
-一般可以把连接池的最大连接数设置在 30 个左右 理论上还可以设置更大的值，但是 DBA（Database Adiministrator） 一般不会允许，因为往往只有出现了慢 SQL 才需要使用更多的连接数。这时候通常需要优化应用层逻辑或者创建数据库索引，而不是一昧地采用加大连接数这种治标不治本的做法。极端情况下甚至会导致数据库服务不晌应，进而影响其他业务。
+一般可以把连接池的最大连接数设置在 30 个左右，理论上还可以设置更大的值，但是 DBA（Database Adiministrator） 一般不会允许，因为往往只有出现了慢 SQL 才需要使用更多的连接数。这时候通常需要优化应用层逻辑或者创建数据库索引，而不是一昧地采用加大连接数这种治标不治本的做法。极端情况下甚至会导致数据库服务不晌应，进而影响其他业务。
 
 从经验上来看，在数据库层面的请求应答时间必须在100ms 以内，秒级的 SQL查询通常存在巨大的性能提升空间，有如下应对方案：
 
@@ -509,8 +509,8 @@ Java 类主要由两部分组成：成员和方法。在定义 Java 类时，推
 |方法实现|可以有|不能有，但在JDK8及之后，允许有default实现|
 |方法访问控制符|无限制|有限制，默认是public abstract类型|
 |属性访问控制符|无限制|有限制，默认是public static final类型|
-|静态方法|可以有|不能有|
-|static{} 静态代码块|可以有|不能有|
+|静态方法|可以有|不能有，但在JDK8及之后，允许实现|
+|静态/非静态代码块|可以有|不能有|
 |本类型之间扩展|单继承|多继承|
 |本类型之间扩展关键字|extends|extends|
 
@@ -1592,8 +1592,7 @@ private static final Logger logger= LoggerFactory.getLogger(Abc.class);
 
 List 集合是线性数据结构的主要实现，集合元素通常存在明确的上一个和下一个元素，也存在明确的第一个元素和最后一个元素。List 集合的遍历结果是稳定的。该体系最常用的是 ArrayList 和 LinkedList 两个集合类。
 
-Array List 是容量可以改变的非线程安全集合。内部实现使用数组进行存储，集
-合扩容时会创建更大的数组空间，把原有数据复制到新数组中。 ArrayList 支持对元素的快速随机访问，但是插入与删除时速度通常很慢，因为这个过程很有可能需要移动其他元素。
+Array List 是容量可以改变的非线程安全集合。内部实现使用数组进行存储，集合扩容时会创建更大的数组空间，把原有数据复制到新数组中。 ArrayList 支持对元素的快速随机访问，但是插入与删除时速度通常很慢，因为这个过程很有可能需要移动其他元素。
 
 LinkedList 的本质是双向链表。与 ArrayList 相比 ，LinkedList 的插入和删除速度更快，但是随机访问速度则很慢。测试表明，对于 10 万条的数据，与 ArrayList 相比，随机提取元素时存在数百倍的差距。除继承 AbstractList 抽象类外， LinkedList 还实现了另一个接口 Deque ，即 `double-ended queue` 。这个接口同时具有队列和栈的性质。LinkedList 包含 3 个重要的成员：size 、frist 、last。size 是双向链表中节点的个数。first 和 last 分别指向第一个和最后一个节点的引用。 LinkedList 的优点在于可以将零散的内存单元通过附加引用的方式关联起来，形成按链路顺序查找的线性结构，内存利用率较高。
 
@@ -1623,8 +1622,7 @@ Set 是不允许出现重复元素的集合类型。 Set 体系最常用的是 H
 
 第 2 处说明：如果原始容量是 13 ，当新添加 1 个元素时，依据程序中的计算方法得出 13 的二进制数为 1101 ，随后右移 1 位操作后得到二进制数 110 ，即十进制数 6 ，最终扩容的大小计算结果为 `oldCapacitiy + (oldCapacity >> 1) = 13 + 6 = 19` 。使用位运算主要是基于计算效率的考虑。在 JDK7 之前的公式，扩容计算方式和结果为 `oldCapacitiy × 3 ÷ 2 + 1 = 13 × 3 ÷ 2 + 1 = 20`
 
-ArrayList 真正数据的数组由 transient 修饰，表示此字段在类的序列化时将被忽略。因为集合序列化时系统会调用 writeObject 写入流中，在网络客户端反序列化的 readObject 时，会重新赋值到新对象的 elementData 中。为什么多此一举？因为 elementData 容量经常会大于实际存储元素的数 ，所以只需发送真正有实际值
-的数组元素即可。
+ArrayList 真正数据的数组由 transient 修饰，表示此字段在类的序列化时将被忽略。因为集合序列化时系统会调用 writeObject 写入流中，在网络客户端反序列化的 readObject 时，会重新赋值到新对象的 elementData 中。为什么多此一举？因为 elementData 容量经常会大于实际存储元素的数 ，所以只需发送真正有实际值的数组元素即可。
 
 ArrayList 使用无参构造时，默认大小为 10 ，也就是说在第一次 add 的时候分配为 10 的容量，后续的每次扩容都会调用 Array.copyOf 方法，创建新数组再复制。可以想象，假如需要将 1000 个元素放置在 ArrayList ，采用默认构造方法，则需要被动扩容 13 次才可以完成存储。若初始化时便指定了容量的初始大小，可以**避免被动扩容和数组复制的额外开销**。最后，进一步设想，如果这个值达到更大量级， 却没有注意初始的容量分配问题，那么无形中造成的性能损耗是非常大的，甚至导致 OOM 的风险。
 
@@ -1727,9 +1725,9 @@ List<Object> objectList = new java.util.ArrayList<Object>(Arrays.asList(数组))
 
 泛型与集合的联合使用，可以把泛型的功能发挥到极致。
 
-#### List、`List<Objectt>`、 `List<?>` 三者的区别
+#### List、`List<Object>`、 `List<?>` 三者的区别
 
-List 完全没有类型限制和赋值限定，如果天马行空地乱用，迟早会类型转换失败的异常。很多程序员觉得 `List<Objectt>`的用法完全等同于 List，但在接受其他泛型赋值时会编译出错。`List<?>` 是一个泛型，在没有赋值之前，表示它可以接受任何类型的集合赋值，赋值之后就不能随便往里添加元素了。
+List 完全没有类型限制和赋值限定，如果天马行空地乱用，迟早会类型转换失败的异常。很多程序员觉得 `List<Object>`的用法完全等同于 List，但在接受其他泛型赋值时会编译出错。`List<?>` 是一个泛型，在没有赋值之前，表示它可以接受任何类型的集合赋值，赋值之后就不能随便往里添加元素了。
 
 ![1566268907287](E:\git_repo\Hao_Learn\2019\8\img\1566268907287.png)
 
@@ -2137,7 +2135,7 @@ public V put(K key, V value) {
 	Entry<K,V> t = root;
 	// 如果当前节点为 null ，即是空树，新增的 KV 形成的节点就是根节点
 	if (t == null) {
-		// 看似事此一举，实际预检了 Key 是否可以比较,
+		// 看似多此一举，实际预检了 Key 是否可以比较,
 		compare(key, key); 
 		root = new Entry<>(key, value, null);
 		size = 1;
@@ -2219,12 +2217,12 @@ private void fixAfterInsertion(Entry<K,V> x) {
 			} else {
 				// 若该节点是父亲的右孩子，则需先对父亲进行一次左旋
 				// 之后父亲变为该节点的左孩子
+                // 注意当前节点为之前的父亲！
 				if (x == rightOf(parentOf(x))) {
 					x = parentOf(x);
 					rotateLeft(x);
 				}
-				// 注意当前节点为之前的父亲！
-				// 将该节点设置为黑色，曾经的爷爷设置为红色
+				// 将当前节点的父节点设置为黑色，曾经的爷爷设置为红色
 				// 因为爷爷变成红色了，所有右边缺少了一个黑色节点
 				// 则需要对爷爷进行右旋，即将该（黑色）节点放置在之前爷爷的位置上
 				setColor(parentOf(x), BLACK);
@@ -2485,14 +2483,12 @@ JDK8 的 HashMap 改进了这种从头节点就开始操作数据迁移的做法
 
 JDK8 对 ConcurrentHashMap 进行了脱胎换骨式的改造，使用了大量的 lock-free 技术来减轻因锁的竞争而对性能造成的影响。它是学习并发编程的一个绝佳示例，此类超过 6300 行代码，涉及 volatile、CAS、锁、链表、红黑树等众多知识点。
 
-ConcurrentHashMap 是在 JDK5 中引入的线程安全的哈希式集合，在 JDK8 之前采用了分段锁的设计理念，相当于 Hashtable 与 HashMap 的折中版本，这是效率与一致性权衡后的结果。分段锁是由内部类 Segment 实现的，它继承于
-ReentrantLock ，用来管理它辖区的各个 HashEntry。Segment 通过加锁的方式，保证每个 Segment 内都不发生冲突。
+ConcurrentHashMap 是在 JDK5 中引入的线程安全的哈希式集合，在 JDK8 之前采用了分段锁的设计理念，相当于 Hashtable 与 HashMap 的折中版本，这是效率与一致性权衡后的结果。分段锁是由内部类 Segment 实现的，它继承于 ReentrantLock ，用来管理它辖区的各个 HashEntry。Segment 通过加锁的方式，保证每个 Segment 内都不发生冲突。
 
 JDK11 版本对 JDK7 版本的ConcurrentHashMap 进行了三点改造：
 1. 取消分段锁机制，进一步降低冲突概率。
 2. 引入红黑树结构。
-3. 使用了更加优化的方式统计集合内的元素数量。首先， Map 原有的 size()
-方法最大只能表示到 `2^31^ - 1`, ConcurrentHashMap 额外提供了 `mappingCount()`用来返回集合内元素的数量，最大可以表示到 `2^63^ - 1`。此外，元素总数更新时，使用了 CAS 多种优化以提高并发能力。
+3. 使用了更加优化的方式统计集合内的元素数量。首先， Map 原有的 size() 方法最大只能表示到 `2^31^ - 1`, ConcurrentHashMap 额外提供了 `mappingCount()`用来返回集合内元素的数量，最大可以表示到 `2^63^ - 1`。此外，元素总数更新时，使用了 CAS 多种优化以提高并发能力。
 
 重要字段：
 ```Java
@@ -2535,7 +2531,7 @@ static final int UNTREEIFY_THRESHOLD = 6;
 
 ![1566996504082](E:\git_repo\Hao_Learn\2019\8\img\1566996504082.png)
 
-在转化过程中，使用同步块锁住当前槽的首元素，防止其他进程对当前槽进行增删改操作，转化完成后利用 CAS 替换原有链表。因为 TreeNode 节点也存储了 next 引用，所以红黑树转链表的操作就变得非常简单，只需从 TreeBin 的 first 元素开始遍历所有的节点，并把节点从 TreeNode 类型转化为 Node 类型即可，当构造好新的链表之后，会同样利用 CAS 替换原有红黑树。相对来说，链表转红黑树更为复杂，流程图如图 6-28 所示。
+table 的长度为 64 ，数据存储结构分为两种：链表和红黑树。当某个槽内的元素个数增加到超过 8 个且 table 的容量大于或等于 64 时， 由链表转为红黑树，当某个槽内的元素个数减少到 6 个时，由红黑树重新转回链表。链表转红黑树的过程，就是把给定顺序的元素构造成一课红黑树的过程。需要注意的是，当table 的容量小于 64 时，只会扩容，并不会把链表转为红黑树。在在转化过程中，使用同步块锁住当前槽的首元素，防止其他进程对当前槽进行增删改操作，转化完成后利用 CAS 替换原有链表。因为 TreeNode 节点也存储了 next 引用，所以红黑树转链表的操作就变得非常简单，只需从 TreeBin 的 first 元素开始遍历所有的节点，并把节点从 TreeNode 类型转化为 Node 类型即可，当构造好新的链表之后，会同样利用 CAS 替换原有红黑树。相对来说，链表转红黑树更为复杂，流程图如图 6-28 所示。
 
 ![1566996696176](C:\Users\18622\AppData\Roaming\Typora\typora-user-images\1566996696176.png)
 
@@ -2630,8 +2626,7 @@ V call() throws Exception;
 
 ## 7.2 什么是锁
 
-单机单线程时代没有锁的概念，但自从出现了资源竞争，人们意识到需要对部分
-场景的执行现场加锁。计算机的锁也是从开始的悲观锁，发展到后来的乐观锁、偏向锁、分段锁等。锁主要提供了两种特性：互斥性和不可见性。
+单机单线程时代没有锁的概念，但自从出现了资源竞争，人们意识到需要对部分场景的执行现场加锁。计算机的锁也是从开始的悲观锁，发展到后来的乐观锁、偏向锁、分段锁等。锁主要提供了两种特性：互斥性和不可见性。
 
 Java 中常用锁实现的方式有两种：
 1. 用并发包中的锁类
@@ -2688,8 +2683,7 @@ volatile 解决的是多线程共享变量的可见性问题，类似于 synchro
 
 CountDownLatch 是基于执行时间的同步类。在实际编码中，可能需要处理基于空闲信号的同步情况。比如海关安检的场景，任何国家公民在出国时，都要走海关的查验通道。假设某机场的海关通道共有 3 个窗口 一批需要出关的人排成长队，每个人都是一个线程。当 3 个窗口中的任意一个出现空闲时，工作人员指示队列中第一个人出队到该空闲窗口接受查验。对于上述场景， JDK 中提供了一个 Semaphore 的信号同步类，只有在调用 Semaphore 对象的 acquire() 成功后，才可以往下执行，完成后执行 release() 释放持有的信号量，下一个线程就可以马上获取这个空闲信号量进入执行。
 
-CyclicBarrier 是基于同步到达某个点的信号量触发机制。CyclicBarrier 命名上即可知道它是一个可以循环使用 （Cyclic）的屏障式 （Barrier)多线程协作方式。采用这种方式进行刚才的安检服务，就是 3 个人同时进去，只有 3 个人都完成安检，才会放下一批进来。这是一种非常低效的安检方式。但在某种场景就是非常正确的方式，假设在机场排队打车时，现场工作人员统一指挥，每次放 3
-辆车进来 ，坐满后开走，再放下一批车和人进来。通过 CyclicBarrier 的 reset()来释放线程资源。
+CyclicBarrier 是基于同步到达某个点的信号量触发机制。CyclicBarrier 命名上即可知道它是一个可以循环使用 （Cyclic）的屏障式 （Barrier）多线程协作方式。采用这种方式进行刚才的安检服务，就是 3 个人同时进去，只有 3 个人都完成安检，才会放下一批进来。这是一种非常低效的安检方式。但在某种场景就是非常正确的方式，假设在机场排队打车时，现场工作人员统一指挥，每次放 3 辆车进来 ，坐满后开走，再放下一批车和人进来。通过 CyclicBarrier 的 reset()来释放线程资源。
 
 ## 7.4 线程池
 
@@ -2754,7 +2748,7 @@ public ThreadPoolExecutor(
 
 Executors 核心的方法有五个：
 
-1. Executors.newWorkStealingPool：JDK8 引人，创建持有足够线程的线程池支持给定的并行度，并通过使用多个队列减少竞争，此构造方法中 CPU 数量设置为默认的并行度。
+1. Executors.newWorkStealingPool：JDK8 引入，创建持有足够线程的线程池支持给定的并行度，并通过使用多个队列减少竞争，此构造方法中 CPU 数量设置为默认的并行度。
 
 ```Java
 public static ExecutorService newWorkStealingPool() {
@@ -3072,7 +3066,7 @@ WeakReference 这种特性也用在了 ThreadLocal 上。 JDK 中的设计原意
 
 #### Threadlocal 价值
 
-ThreadLocal 不能被翻译为线程本地化或本地线程，英语恰当的名称应该叫作`CopyValuelntoEveryThread`。
+ThreadLocal 不能被翻译为线程本地化或本地线程，英语恰当的名称应该叫作`CopyValueIntoEveryThread`。
 
 ```Java
 public T get() {
@@ -3089,7 +3083,7 @@ public T get() {
 	return setInitialValue();
 }
 ```
-每个线程都有自己的 ThreadLoca!Map，如果 map == null ，则直接执行 setlnitialValue() 。如果 map 已经创建，就表示 Thread 类的 threadLocals 属性已经初始化，如果 e == null ，依然会执行到 setlnitialValue()。源码如下：
+每个线程都有自己的 ThreadLocalMap，如果 map == null ，则直接执行 setlnitialValue() 。如果 map 已经创建，就表示 Thread 类的 threadLocals 属性已经初始化，如果 e == null ，依然会执行到 setlnitialValue()。setlnitialValue() 的源码如下：
 
 ```Java
 protected T initialValue() {
@@ -3112,7 +3106,7 @@ private T setInitialValue() {
 ```Java
 private static final ThreadLocalRandom RANDOM = ThreadLocalRandom.current();
 ```
-threadLocalRandom 可以生成单独的Random 实例，此类在 JDK7 中引人，它使得每个线程都可以有自己的随机数生成器。要避免 Random 实例被多线程使用，虽然共享该实例是线程安全的，但会因竞争同一 seed 而导致性能下降。
+threadLocalRandom 可以生成单独的Random 实例，此类在 JDK7 中引入，它使得每个线程都可以有自己的随机数生成器。要避免 Random 实例被多线程使用，虽然共享该实例是线程安全的，但会因竞争同一 seed 而导致性能下降。
 
 ThreadLocal 对象通常是由 private static 修饰的，因为都需要复制进入本地线程，所以非 static 作用不大。需要注意的是， ThreadLocal 无法解决共享对象的更新问题，使用某个引用来操作共享对象时，依然需要进行线程同步。
 
@@ -3123,8 +3117,8 @@ ThreadLocal 有个静态内部类叫 ThreadLocalMap，它还有一个静态内�
 ![1566874718278](E:\git_repo\Hao_Learn\2019\8\img\1566874718278.png)
 
 - 1 个 Thread 有且仅有 1 个 ThreadLocalMap 对象；
-- 1 个 Entry 对象的 Key 弱引用指向 1 个 ThreadLocal 对象；
 - 1 个 ThreadLocalMap 对象存储多个 Entry 对象；
+- 1 个 Entry 对象的 Key 弱引用指向 1 个 ThreadLocal 对象；
 - 1 个 ThreadLocal 对象可以被多个线程所共享；
 - ThreadLocal 对象不持有 Value, Value 由线程的 Entry 对象持有。
 
@@ -3149,7 +3143,7 @@ ThreadLocal 对象通常作为私有静态变量使用，那么其生命周期�
 线程使用 ThreadLocal 有三个重要方法：
 1. set()：如果没有 set 操作的 ThreadLocal ，容易引起脏数据问题。
 2. get()：始终没有 get 操作的 ThreadLocal 对象是没有意义的。
-3. remove()：如果没有 rcmove 操作，容易引起内存泄露。
+3. remove()：如果没有 remove 操作，容易引起内存泄露。
 
 ThreadLocal ，它通常用于同一个线程内，跨类、跨方法传递数据。如果没有 ThreadLocal ，那么相互之间的信息传递，势必要靠返回值和参数，这样无形之中，有些类甚至有些框架会互相耦合。
 
@@ -3410,7 +3404,7 @@ AIR 原则具体包括：
 
 JUnit5.x 由以下三个主要模块组成：
 
-- JUnit Platform：用于在 JVM 上启动测试框架，统一命令行、 Gradle 和 Maven 等方式执行测试的人口。
+- JUnit Platform：用于在 JVM 上启动测试框架，统一命令行、 Gradle 和 Maven 等方式执行测试的入口。
 - JUnit Jupiter：包含 JUnit5.x 全新的编程模型和扩展机制。
 - JUnit Vintage：用于在新的框架中兼容运行 JUnit3.x 和 JUnit4.x 测试用例。
 
