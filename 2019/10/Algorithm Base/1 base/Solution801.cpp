@@ -59,3 +59,38 @@ int main(){
     return 0;
 }
 
+/**
+ * n的二进制表示中，第 k 位是几
+ * 
+ * 1. 先把第k位移到最后一位：n >> k
+ * 2. 看个位是几：x & 1
+ * 
+ * 取x的最后一位1及其后面的n个0所构成的一个数：x & (-x)
+ */
+
+#include<iostream>
+using namespace std;
+
+int lowbit(int x){
+	return x & (-x);
+}
+
+int main(){
+
+    int n;
+    cin >> n;
+    
+    for(int i = 1; i <= n; ++ i){
+		int x, res = 0;
+		cin >> x;
+
+		while(x) {
+			x -= lowbit(x);
+			res ++;
+		}
+
+		cout << res << " ";
+    }
+    
+    return 0;
+}

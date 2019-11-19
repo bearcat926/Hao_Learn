@@ -28,3 +28,56 @@
  * 输出样例：
  * 3
  */
+
+#include<iostream>
+#include<vector>
+#include<algorithm>
+
+using namespace std;
+
+const int N = 1e5 + 10;
+
+typedef pair<int, int> PII;
+
+vector<PII> segs;
+
+void merge_seg(vector<PII> &segs){
+    vector<PII> res;
+    // 1.排序
+    sort(segs.begin(), segs.end());
+    // 2.合并
+    int start = -2e9, end = -2e9;
+    
+    for(auto seg : segs){
+        // 处理下一个区间
+        if(seg.first > end){
+            // 排除初始情况
+            if(start != -2e9) res.push_back({start, end});
+            start = seg.first;
+            end = seg.second;
+        }
+        else end = max(end, seg.second);
+    }
+    
+    // 处理最后一个区间
+    if(start != -2e9) res.push_back({start, end});
+    
+    segs = res;
+}
+
+int main(){
+    int n;
+    cin >> n;
+    
+    for(int i = 0; i < n; i ++){
+        int l, r;
+        cin >> l >> r;
+        segs.push_back({l, r});
+    }
+    
+    merge_seg(segs);
+    
+    cout << segs.size() << endl;
+    
+    return 0;
+}
