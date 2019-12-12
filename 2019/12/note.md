@@ -76,7 +76,7 @@ PATENT_IPC 字段长度 64 -> 128 -> 500
 
 遇到的问题并解决：
 
-1.Batch update returned unexpected row count from update [0]; actual row count: 0; expected: 1 等数据库操作问题-> 更新时出现问题，重写dao层接口解决
+1.Batch update returned unexpected row count from update [0]; actual row count: 0; expected: 1 等数据库操作问题导致更新时出现问题 -> 通过重写dao层接口，并统一session状态解决
 2.session中存在一条数据的多个实体（例如级联时） -> clear + addAll
 
 总结：第一次使用hibernate开发企业项目出现了很多的数据库问题占用了太多时间，但是也在其中积累的很多的解决该类问题的经验，并且在开发的过程中，增强了业务代码的构思能力，受益匪浅。
