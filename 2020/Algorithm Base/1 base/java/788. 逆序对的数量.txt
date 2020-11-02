@@ -1,0 +1,42 @@
+import java.util.Scanner;
+import java.io.BufferedInputStream;
+
+public class Main {
+    private static long result = 0L;
+
+    public static void main(String[] args) {
+        Scanner in = new Scanner(new BufferedInputStream(System.in));
+        int n = in.nextInt();
+        int[] arr = new int[n];
+        for (int i = 0; i < n; i++) {
+            arr[i] = in.nextInt();
+        }
+        int[] temp = new int[n];	
+        
+        System.out.print(mergeSort(arr, temp, 0, n - 1));
+    }
+    
+    private static long mergeSort(int[] arr, int[] temp, int l, int r) {
+        if(l >= r) return 0L;
+        
+        int mid = (l + r) >> 1;
+        
+        result = mergeSort(arr, temp, l, mid) + mergeSort(arr, temp, mid + 1, r);
+
+        int i = l, j = mid + 1, k = l;
+        while(i <= mid && j <= r){
+            if(arr[i] > arr[j]) {
+                temp[k++] = arr[j++];
+                result += mid - i + 1;
+            }
+            else temp[k++] = arr[i++];
+        }
+        
+        while(i <= mid) temp[k++] = arr[i++];
+        while(j <= r) temp[k++] = arr[j++];
+        
+        for(i = l, j = l; i <= r; i ++, j ++) arr[i] = temp[j];
+
+        return result;
+    }  
+}
