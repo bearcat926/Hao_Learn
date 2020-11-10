@@ -41,6 +41,9 @@
 		"stdexcept": "cpp",
 		"streambuf": "cpp",
 		"typeinfo": "cpp",
-		"cstring": "cpp"
+		"cstring": "cpp",
+		"stdlib.h": "c",
+		"stdio.h": "c",
+		"regex.h": "c"
 	}
 }
