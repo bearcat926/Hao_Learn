@@ -1,13 +1,20 @@
 """
-扩展欧几里得算法求逆元
-
 线性同余方程
 
-    当n不是质数时，可以用：
-            a有逆元的充要条件是 a, p互质，所以 gcd(a, p) = 1
-            假设 a的逆元为x，那么有 a * x ≡ 1 (mod p)
-            等价：ax + py = 1
-            ex_gcd(a, p, x, y)
+    形如 ai × xi ≡ bi(mod mi) 的方程
+    存在y ∈ Z,使得 ai × x = mi × y + bi
+    整理后可得 ai × x - mi × y = bi
+    且 y ∈ Z, 可使得 -mi × y = mi × y'
+    带入可得等式1 ai × x + mi × y = bi
+    引入裴蜀定理,
+    则当且仅当 ai, mi具有最大公约数(ai, mi)时, ai * x + mi * y = (ai, mi)
+    对等式1两边同乘 bi / (ai, mi), 得 ai * bi / (ai, mi) * x + mi * bi / (ai, mi) * y = bi
+    整理得 ai * bi / (ai, mi) * x = bi + mi * bi / (ai, mi) * y
+    由 mi * bi / (ai, mi) * y mod mi == 0
+    可得 ai * bi / (ai, mi) * x ≡ bi mod mi
+    则 ai × xi ≡ ai * bi / (ai, mi) * x mod mi
+    两边消去ai得 xi ≡ (bi / (ai, mi) * x) mod mi
+    因此存在 (bi / (ai, mi) * x) mod mi 满足 xi
 
 =======================================
 线性同余方程
@@ -37,3 +44,24 @@ impossible
 -3
 
 """
+x, y = 0, 0
+
+
+def ex_gcd(i, j):
+    global x, y
+    if j == 0:
+        x, y = 1, 0
+        return i
+
+    d = ex_gcd(j, i % j)
+    x, y = y, x - i // j * y
+    return d
+
+
+if __name__ == '__main__':
+    n = int(input())
+    for i in range(n):
+        a, b, m = map(int, input().split())
+        x, y = 0, 0
+        d = ex_gcd(a, m)
+        print((x * b // d) % m if b % d == 0 else 'impossible')
