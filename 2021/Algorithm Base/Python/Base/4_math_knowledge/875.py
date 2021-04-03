@@ -60,7 +60,6 @@
 1
 """
 N = 2 * (10 ** 9)
-R = []
 
 
 def fast_power(a, b, p):
@@ -80,9 +79,6 @@ def fast_power(a, b, p):
 
 if __name__ == '__main__':
     x = 1
-    while x <= N:
-        R.append(x)
-        x <<= 1
     n = int(input())
     for i in range(n):
         a, b, p = map(int, input().split())
