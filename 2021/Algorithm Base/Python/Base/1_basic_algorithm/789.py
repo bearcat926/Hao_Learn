@@ -35,6 +35,7 @@
 """
 
 
+# 查找左边界时，以 mid = right为基准进行二分，当 x > nums时去[mid + 1, end]中查找
 def get_left_bound(nums, x):
     left, right = 0, len(nums) - 1
     while left < right:
@@ -48,6 +49,7 @@ def get_left_bound(nums, x):
     return left
 
 
+# 查找右边界时，以 mid = left为基准进行二分，当 x < nums时去[start, mid - 1]中查找
 def get_right_bound(nums, x):
     left, right = 0, len(nums) - 1
     while left < right:
