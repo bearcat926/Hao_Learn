@@ -1,6 +1,7 @@
 **/target/
 **/test/**
 **/.idea/
+**/.vscode/
 *.iml
 **/dist/
 **/node_modules/
