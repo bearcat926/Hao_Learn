@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CodeBlocks_project_file>
+	<FileVersion major="1" minor="6"/>
+	<Project>
+		<Option title="c__"/>
+		<Option makefile_is_custom="1"/>
+		<Option compiler="gcc"/>
+		<Option virtualFolders="CMake Files\;"/>
+		<Build>
+			<Target title="all">
+				<Option working_dir="E:/git_repo/Hao_Learn/2020/Algorithm Base/1 base/c++/cmake-build-debug"/>
+				<Option type="4"/>
+				<MakeCommands>
+					<Build command="D:/mingw64/bin/mingw32-make.exe -f &quot;E:/git_repo/Hao_Learn/2020/Algorithm Base/1 base/c++/cmake-build-debug/Makefile&quot;  VERBOSE=1 all"/>
+					<CompileFile command="D:/mingw64/bin/mingw32-make.exe -f &quot;E:/git_repo/Hao_Learn/2020/Algorithm Base/1 base/c++/cmake-build-debug/Makefile&quot;  VERBOSE=1 &quot;$file&quot;"/>
+					<Clean command="D:/mingw64/bin/mingw32-make.exe -f &quot;E:/git_repo/Hao_Learn/2020/Algorithm Base/1 base/c++/cmake-build-debug/Makefile&quot;  VERBOSE=1 clean"/>
+					<DistClean command="D:/mingw64/bin/mingw32-make.exe -f &quot;E:/git_repo/Hao_Learn/2020/Algorithm Base/1 base/c++/cmake-build-debug/Makefile&quot;  VERBOSE=1 clean"/>
+				</MakeCommands>
+			</Target>
+			<Target title="edit_cache">
+				<Option working_dir="E:/git_repo/Hao_Learn/2020/Algorithm Base/1 base/c++/cmake-build-debug"/>
+				<Option type="4"/>
+				<MakeCommands>
+					<Build command="D:/mingw64/bin/mingw32-make.exe -f &quot;E:/git_repo/Hao_Learn/2020/Algorithm Base/1 base/c++/cmake-build-debug/Makefile&quot;  VERBOSE=1 edit_cache"/>
+					<CompileFile command="D:/mingw64/bin/mingw32-make.exe -f &quot;E:/git_repo/Hao_Learn/2020/Algorithm Base/1 base/c++/cmake-build-debug/Makefile&quot;  VERBOSE=1 &quot;$file&quot;"/>
+					<Clean command="D:/mingw64/bin/mingw32-make.exe -f &quot;E:/git_repo/Hao_Learn/2020/Algorithm Base/1 base/c++/cmake-build-debug/Makefile&quot;  VERBOSE=1 clean"/>
+					<DistClean command="D:/mingw64/bin/mingw32-make.exe -f &quot;E:/git_repo/Hao_Learn/2020/Algorithm Base/1 base/c++/cmake-build-debug/Makefile&quot;  VERBOSE=1 clean"/>
+				</MakeCommands>
+			</Target>
+			<Target title="c__">
+				<Option output="E:/git_repo/Hao_Learn/2020/Algorithm Base/1 base/c++/cmake-build-debug/c__.exe" prefix_auto="0" extension_auto="0"/>
+				<Option working_dir="E:/git_repo/Hao_Learn/2020/Algorithm Base/1 base/c++/cmake-build-debug"/>
+				<Option object_output="./"/>
+				<Option type="1"/>
+				<Option compiler="gcc"/>
+				<Compiler>
+					<Add directory="D:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/7.3.0/include/c++"/>
+					<Add directory="D:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/7.3.0/include/c++/x86_64-w64-mingw32"/>
+					<Add directory="D:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/7.3.0/include/c++/backward"/>
+					<Add directory="D:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/7.3.0/include"/>
+					<Add directory="D:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/7.3.0/include-fixed"/>
+					<Add directory="D:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/7.3.0/../../../../x86_64-w64-mingw32/include"/>
+				</Compiler>
+				<MakeCommands>
+					<Build command="D:/mingw64/bin/mingw32-make.exe -f &quot;E:/git_repo/Hao_Learn/2020/Algorithm Base/1 base/c++/cmake-build-debug/Makefile&quot;  VERBOSE=1 c__"/>
+					<CompileFile command="D:/mingw64/bin/mingw32-make.exe -f &quot;E:/git_repo/Hao_Learn/2020/Algorithm Base/1 base/c++/cmake-build-debug/Makefile&quot;  VERBOSE=1 &quot;$file&quot;"/>
+					<Clean command="D:/mingw64/bin/mingw32-make.exe -f &quot;E:/git_repo/Hao_Learn/2020/Algorithm Base/1 base/c++/cmake-build-debug/Makefile&quot;  VERBOSE=1 clean"/>
+					<DistClean command="D:/mingw64/bin/mingw32-make.exe -f &quot;E:/git_repo/Hao_Learn/2020/Algorithm Base/1 base/c++/cmake-build-debug/Makefile&quot;  VERBOSE=1 clean"/>
+				</MakeCommands>
+			</Target>
+			<Target title="c__/fast">
+				<Option output="E:/git_repo/Hao_Learn/2020/Algorithm Base/1 base/c++/cmake-build-debug/c__.exe" prefix_auto="0" extension_auto="0"/>
+				<Option working_dir="E:/git_repo/Hao_Learn/2020/Algorithm Base/1 base/c++/cmake-build-debug"/>
+				<Option object_output="./"/>
+				<Option type="1"/>
+				<Option compiler="gcc"/>
+				<Compiler>
+					<Add directory="D:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/7.3.0/include/c++"/>
+					<Add directory="D:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/7.3.0/include/c++/x86_64-w64-mingw32"/>
+					<Add directory="D:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/7.3.0/include/c++/backward"/>
+					<Add directory="D:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/7.3.0/include"/>
+					<Add directory="D:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/7.3.0/include-fixed"/>
+					<Add directory="D:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/7.3.0/../../../../x86_64-w64-mingw32/include"/>
+				</Compiler>
+				<MakeCommands>
+					<Build command="D:/mingw64/bin/mingw32-make.exe -f &quot;E:/git_repo/Hao_Learn/2020/Algorithm Base/1 base/c++/cmake-build-debug/Makefile&quot;  VERBOSE=1 c__/fast"/>
+					<CompileFile command="D:/mingw64/bin/mingw32-make.exe -f &quot;E:/git_repo/Hao_Learn/2020/Algorithm Base/1 base/c++/cmake-build-debug/Makefile&quot;  VERBOSE=1 &quot;$file&quot;"/>
+					<Clean command="D:/mingw64/bin/mingw32-make.exe -f &quot;E:/git_repo/Hao_Learn/2020/Algorithm Base/1 base/c++/cmake-build-debug/Makefile&quot;  VERBOSE=1 clean"/>
+					<DistClean command="D:/mingw64/bin/mingw32-make.exe -f &quot;E:/git_repo/Hao_Learn/2020/Algorithm Base/1 base/c++/cmake-build-debug/Makefile&quot;  VERBOSE=1 clean"/>
+				</MakeCommands>
+			</Target>
+			<Target title="rebuild_cache">
+				<Option working_dir="E:/git_repo/Hao_Learn/2020/Algorithm Base/1 base/c++/cmake-build-debug"/>
+				<Option type="4"/>
+				<MakeCommands>
+					<Build command="D:/mingw64/bin/mingw32-make.exe -f &quot;E:/git_repo/Hao_Learn/2020/Algorithm Base/1 base/c++/cmake-build-debug/Makefile&quot;  VERBOSE=1 rebuild_cache"/>
+					<CompileFile command="D:/mingw64/bin/mingw32-make.exe -f &quot;E:/git_repo/Hao_Learn/2020/Algorithm Base/1 base/c++/cmake-build-debug/Makefile&quot;  VERBOSE=1 &quot;$file&quot;"/>
+					<Clean command="D:/mingw64/bin/mingw32-make.exe -f &quot;E:/git_repo/Hao_Learn/2020/Algorithm Base/1 base/c++/cmake-build-debug/Makefile&quot;  VERBOSE=1 clean"/>
+					<DistClean command="D:/mingw64/bin/mingw32-make.exe -f &quot;E:/git_repo/Hao_Learn/2020/Algorithm Base/1 base/c++/cmake-build-debug/Makefile&quot;  VERBOSE=1 clean"/>
+				</MakeCommands>
+			</Target>
+		</Build>
+		<Unit filename="E:/git_repo/Hao_Learn/2020/Algorithm Base/1 base/c++/Solution785.cpp">
+			<Option target="c__"/>
+		</Unit>
+		<Unit filename="E:/git_repo/Hao_Learn/2020/Algorithm Base/1 base/c++/Solution786.cpp">
+			<Option target="c__"/>
+		</Unit>
+		<Unit filename="E:/git_repo/Hao_Learn/2020/Algorithm Base/1 base/c++/Solution787.cpp">
+			<Option target="c__"/>
+		</Unit>
+		<Unit filename="E:/git_repo/Hao_Learn/2020/Algorithm Base/1 base/c++/Solution788.cpp">
+			<Option target="c__"/>
+		</Unit>
+		<Unit filename="E:/git_repo/Hao_Learn/2020/Algorithm Base/1 base/c++/Solution789.cpp">
+			<Option target="c__"/>
+		</Unit>
+		<Unit filename="E:/git_repo/Hao_Learn/2020/Algorithm Base/1 base/c++/Solution790.cpp">
+			<Option target="c__"/>
+		</Unit>
+		<Unit filename="E:/git_repo/Hao_Learn/2020/Algorithm Base/1 base/c++/Solution791.cpp">
+			<Option target="c__"/>
+		</Unit>
+		<Unit filename="E:/git_repo/Hao_Learn/2020/Algorithm Base/1 base/c++/Solution792.cpp">
+			<Option target="c__"/>
+		</Unit>
+		<Unit filename="E:/git_repo/Hao_Learn/2020/Algorithm Base/1 base/c++/Solution793.cpp">
+			<Option target="c__"/>
+		</Unit>
+		<Unit filename="E:/git_repo/Hao_Learn/2020/Algorithm Base/1 base/c++/Solution794.cpp">
+			<Option target="c__"/>
+		</Unit>
+		<Unit filename="E:/git_repo/Hao_Learn/2020/Algorithm Base/1 base/c++/Solution795.cpp">
+			<Option target="c__"/>
+		</Unit>
+		<Unit filename="E:/git_repo/Hao_Learn/2020/Algorithm Base/1 base/c++/Solution796.cpp">
+			<Option target="c__"/>
+		</Unit>
+		<Unit filename="E:/git_repo/Hao_Learn/2020/Algorithm Base/1 base/c++/Solution797.cpp">
+			<Option target="c__"/>
+		</Unit>
+		<Unit filename="E:/git_repo/Hao_Learn/2020/Algorithm Base/1 base/c++/Solution798.cpp">
+			<Option target="c__"/>
+		</Unit>
+		<Unit filename="E:/git_repo/Hao_Learn/2020/Algorithm Base/1 base/c++/Solution799.cpp">
+			<Option target="c__"/>
+		</Unit>
+		<Unit filename="E:/git_repo/Hao_Learn/2020/Algorithm Base/1 base/c++/Solution800.cpp">
+			<Option target="c__"/>
+		</Unit>
+		<Unit filename="E:/git_repo/Hao_Learn/2020/Algorithm Base/1 base/c++/Solution801.cpp">
+			<Option target="c__"/>
+		</Unit>
+		<Unit filename="E:/git_repo/Hao_Learn/2020/Algorithm Base/1 base/c++/Solution802.cpp">
+			<Option target="c__"/>
+		</Unit>
+		<Unit filename="E:/git_repo/Hao_Learn/2020/Algorithm Base/1 base/c++/Solution803.cpp">
+			<Option target="c__"/>
+		</Unit>
+		<Unit filename="E:/git_repo/Hao_Learn/2020/Algorithm Base/1 base/c++/CMakeLists.txt">
+			<Option virtualFolder="CMake Files\"/>
+		</Unit>
+	</Project>
+</CodeBlocks_project_file>
