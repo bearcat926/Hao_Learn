@@ -65,17 +65,15 @@ if __name__ == '__main__':
         print(i, end=' ')
 
 # 三路快排
-# def quick_sort(nums):
-#     if (len(nums) <= 1): return nums;
-#
-#     privot = nums[len(nums) // 2]
-#     left = [x for x in nums if x < privot]
-#     mid = [x for x in nums if x == privot]
-#     right = [x for x in nums if x > privot]
-#     # print (" ".join(list(map(str, left))) +","+ str(mid[0]) +","+" ".join(list(map(str, right))) )
-#     return quick_sort(left) + mid + quick_sort(right)
-#
-#
+def quick_sort(nums):
+    if (len(nums) <= 1): return nums;
+
+    privot = nums[len(nums) // 2]
+    left = [x for x in nums if x < privot]
+    mid = [x for x in nums if x == privot]
+    right = [x for x in nums if x > privot]
+    return quick_sort(left) + mid + quick_sort(right)
+
 # if __name__ == "__main__":
 #     n = int(input())
 #     nums = list(map(int, input().split()))
