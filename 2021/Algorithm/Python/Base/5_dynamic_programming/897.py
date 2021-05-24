@@ -15,7 +15,7 @@
 输出一个整数，表示最大长度。
 
 数据范围
-1≤N,M≤1000
+1 ≤ N,M ≤ 1000
 输入样例：
 4 5
 acbd
@@ -27,15 +27,26 @@ abedc
 
     集合：所有在第一个序列的前 i个字母中出现，且在第二个序列的前 j个字母中出现的子序列
 
-    属性：max
+    属性：MAX
 
 状态计算
+
+    f(i-1, j)，f(i, j-1)包含重复情况，原因是当前情况包含但不等于 必选 a[i]或b[j]的情况。
+    但并不影响最终结果，因为题目求的值为 MAX
 
     f(i, j) = max(f(i-1, j), f(i, j-1), f(i-1, j-1) + 1)
 
 """
-
+N = 1000 + 10
+F = [[0] * N for i in range(N)]  # 需要全部初始化
 
 if __name__ == '__main__':
     n, m = map(int, input().split())
-
+    A = ' ' + input()
+    B = ' ' + input()
+    for i in range(1, n + 1):
+        for j in range(1, m + 1):
+            F[i][j] = max(F[i - 1][j], F[i][j - 1])
+            if A[i] == B[j]:
+                F[i][j] = max(F[i][j], F[i - 1][j - 1] + 1)
+    print(F[n][m])

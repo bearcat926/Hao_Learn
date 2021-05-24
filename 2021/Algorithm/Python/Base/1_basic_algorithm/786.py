@@ -19,8 +19,10 @@
 输出样例：
 3
 """
+
+
 def quick_select(start, end, k):
-    if start == end:
+    if start == end:  # 只有一个数字时返回，该数字为第k小的数
         return nums[start]
 
     left, right = start - 1, end + 1
@@ -40,10 +42,11 @@ def quick_select(start, end, k):
 
     # right = left or right < left
     length = right - start + 1  # 左半区间的区间长度
-    if k <= length:
+    if k <= length:  # k在左半区
         return quick_select(start, right, k)
-    else:
+    else:  # k在右半区
         return quick_select(right + 1, end, k - length)
+
 
 if __name__ == '__main__':
     n, k = map(int, input().split())
